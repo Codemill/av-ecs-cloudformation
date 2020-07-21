@@ -96,63 +96,38 @@ Resources:
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
           Environment:
-            - Name: ACL_ENABLED
-              Value: "false"
-            - Name: ACL_STORAGE_ENABLED
-              Value: "false"
-            - Name: AUTH_ENABLED
-              Value: "true"
-            - Name: AUTH_FALLBACK_USERNAME
-              Value: "false"
-            - Name: AUTH_JWT_ENABLED
-              Value: "true"
-            - Name: AUTH_JWT_ISSUER
-              Value: "https://keycloak.codemill.cloud/auth/realms/av-dev"
-            - Name: AUTH_JWT_JWK_FILENAME
-              Value: "https://keycloak.codemill.cloud/auth/realms/av-dev/protocol/openid-connect/certs"
-            - Name: AUTH_JWT_USERNAME
-              Value: "preferred_username"
-            - Name: DELETION_PHYSICAL_FILE_ENABLED
-              Value: "false"
-            - Name: QUARKUS_DATASOURCE_DRIVER
-              Value: "org.postgresql.Driver"
-            - Name: QUARKUS_DATASOURCE_PASSWORD
-              Value: "postgres"
-            - Name: QUARKUS_DATASOURCE_USERNAME
-              Value: "postgres"
-            - Name: QUARKUS_DATASOURCE_URL
-              Value:
-                !Sub
-                  - "jdbc:postgresql://${DBUrl}/${dbName}"
-                  - DBUrl:
-                      Fn::ImportValue:
-                        !Join [':', [!Ref 'StackName', 'DBEndpoint']]
-                    dbName: !Ref 'DBName'
-            - Name: QUARKUS_FLYWAY_BASELINE-ON-MIGRATE
-              Value: "false"
-            - Name: QUARKUS_FLYWAY_MIGRATE-AT-START
-              Value: "false"
-            - Name: QUARKUS_HIBERNATE-ORM_DIALECT
-              Value: "org.hibernate.dialect.HSQLDialect"
-            - Name: QUARKUS_HIBERNATE-ORM_LOG_SQL
-              Value: "false"
-            - Name: QUARKUS_HTTP_CORS
-              Value: "true"
-            - Name: QUARKUS_LOG_LEVEL
-              Value: "INFO"
-            - Name: QUARKUS_SECURITY_USERS_FILE_ENABLED
-              Value: "false"
             - Name: QUARKUS_VERTX_CLUSTER_HOST
               Value: "0.0.0.0"
             - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_HOST
-              Value: "dev-backend"
+              Value: !Join ['', [!Ref 'ServiceName', '.av.local']]
+            - Name: AP_ADAPTER_URL_MP_REST_URL
+              Value: 'http://av-adapter.av.local:8080'
+            - Name: AV_RUNNER_BINDIR
+              Value: "/usr/local/bin"
+
+  DiscoveryService:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Description: Discovery Service for the Demo Application
+      DnsConfig:
+        RoutingPolicy: MULTIVALUE
+        DnsRecords:
+          - TTL: 60
+            Type: A
+          - TTL: 60
+            Type: SRV
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+      Name: !Ref 'ServiceName'
+      NamespaceId:
+        Fn::ImportValue:
+          !Join [':', [!Ref 'StackName', 'PrivateDNSNamespace']]
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
   # as monitor the number of running tasks and replace any that have crashed
   Service:
     Type: AWS::ECS::Service
-    DependsOn: LoadBalancerRule
     Properties:
       ServiceName: !Ref 'ServiceName'
       Cluster:
@@ -174,7 +149,6 @@ Resources:
             - Fn::ImportValue:
                 !Join [':', [!Ref 'StackName', 'PrivateSubnetTwo']]
       TaskDefinition: !Ref 'TaskDefinition'
-      LoadBalancers:
-        - ContainerName: !Ref 'ServiceName'
-          ContainerPort: !Ref 'ContainerPort'
-          TargetGroupArn: !Ref 'TargetGroup'
+      ServiceRegistries:
+        - RegistryArn: !GetAtt DiscoveryService.Arn
+          Port: 5700

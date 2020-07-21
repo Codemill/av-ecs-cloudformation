@@ -8,7 +8,7 @@ Parameters:
                  to locate and reference resources created by that stack.
   ServiceName:
     Type: String
-    Default: av-adapter
+    Default: av-analyze
     Description: A name for the service
   DBName:
     Type: String
@@ -20,11 +20,11 @@ Parameters:
     Description: The ecr repo and tag to use for image deployment
   RepoImage:
     Type: String
-    Default: accurate-player-adapter-postgres
+    Default: accurate-analyze
     Description: The ecr repo and tag to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.0.2-api
+    Default: 1.1.1-api
     Description: The ecr repo and tag to use for image deployment
   RegistryCredentias:
     Type: String
@@ -44,13 +44,13 @@ Parameters:
     Description: How much memory in megabytes to give the container
   Path:
     Type: String
-    Default: "/api/*"
+    Default: "/api/analyze/*"
     Description: A path on the public load balancer that this service
                  should be connected to. Use * to send all load balancer
                  traffic to this service.
   Priority:
     Type: Number
-    Default: 2
+    Default: 1
     Description: The priority for the routing rule added to the load balancer.
                  This only applies if your have multiple services which have been
                  assigned to different paths on the load balancer.
@@ -119,54 +119,13 @@ Resources:
           Environment:
             - Name: ACL_ENABLED
               Value: "false"
-            - Name: ACL_STORAGE_ENABLED
-              Value: "false"
-            - Name: AUTH_ENABLED
-              Value: "true"
-            - Name: AUTH_FALLBACK_USERNAME
-              Value: "false"
-            - Name: AUTH_JWT_ENABLED
-              Value: "true"
-            - Name: AUTH_JWT_ISSUER
-              Value: "https://keycloak.codemill.cloud/auth/realms/av-dev"
-            - Name: AUTH_JWT_JWK_FILENAME
-              Value: "https://keycloak.codemill.cloud/auth/realms/av-dev/protocol/openid-connect/certs"
-            - Name: AUTH_JWT_USERNAME
-              Value: "preferred_username"
-            - Name: DELETION_PHYSICAL_FILE_ENABLED
-              Value: "false"
-            - Name: QUARKUS_DATASOURCE_DRIVER
-              Value: "org.postgresql.Driver"
-            - Name: QUARKUS_DATASOURCE_PASSWORD
-              Value: "postgres"
-            - Name: QUARKUS_DATASOURCE_USERNAME
-              Value: "postgres"
-            - Name: QUARKUS_DATASOURCE_URL
-              Value:
-                !Sub
-                  - "jdbc:postgresql://${DBUrl}/${dbName}"
-                  - DBUrl:
-                      Fn::ImportValue:
-                        !Join [':', [!Ref 'StackName', 'DBEndpoint']]
-                    dbName: !Ref 'DBName'
-            - Name: QUARKUS_FLYWAY_BASELINE-ON-MIGRATE
-              Value: "false"
-            - Name: QUARKUS_FLYWAY_MIGRATE-AT-START
-              Value: "false"
-            - Name: QUARKUS_HIBERNATE-ORM_DIALECT
-              Value: "org.hibernate.dialect.HSQLDialect"
-            - Name: QUARKUS_HIBERNATE-ORM_LOG_SQL
-              Value: "false"
-            - Name: QUARKUS_HTTP_CORS
-              Value: "true"
-            - Name: QUARKUS_LOG_LEVEL
-              Value: "INFO"
-            - Name: QUARKUS_SECURITY_USERS_FILE_ENABLED
-              Value: "false"
-            - Name: QUARKUS_VERTX_CLUSTER_HOST
-              Value: "0.0.0.0"
-            - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_HOST
-              Value: !Join ['', [!Ref 'ServiceName', '.av.local']]
+
+        - name: AP_ANALYZE_CACHE_DAYS
+          value: "5"
+        - name: AP_ANALYZE_CACHE_DIR
+          value: /tmp/wav
+        - name: QUARKUS_HTTP_CORS
+          value: "true"
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
@@ -234,12 +193,12 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       HealthCheckIntervalSeconds: 150
-      HealthCheckPath: /api/asset
+      HealthCheckPath: /api/analyze/audio/async
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 120
       HealthyThresholdCount: 2
       Matcher:
-        HttpCode: '200,401'
+        HttpCode: '200,401,400'
       TargetType: ip
       Name: !Ref 'ServiceName'
       Port: !Ref 'ContainerPort'

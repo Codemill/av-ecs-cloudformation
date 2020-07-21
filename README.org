@@ -1,11 +1,26 @@
 #+TITLE: AV on ECS
 
-Cloud formation stacks for getting AV up and running on ECS
+Cloudformation stacks for getting AV up and running on ECS targeting Fargate
 
 Disclaimer:
 #+begin_quote
 The common and best practice is to have everything doubled in AWS.
 #+end_quote
+
+The stacks configures:
+- VPC
+- Networking
+  - NAT
+  - Gateway
+  - Servicediscovery
+  - Routing
+  - etc.
+- RDS
+- IAM Roles
+- ECS Cluster
+- Cloudwatch
+
+
 
 *** aws cli with cloudformation
 
@@ -80,6 +95,18 @@ aws cloudformation create-stack --template-body file://$PWD/av-frontend-deployme
 
 #+begin_src sh :results raw drawer
 aws cloudformation create-stack --template-body file://$PWD/av-adapter-deployment.yaml --stack-name av-adapter-deploy --parameters ParameterKey=StackName,ParameterValue=av-ecs
+#+end_src
+
+***** Runner stack
+
+#+begin_src sh :results raw drawer
+aws cloudformation create-stack --template-body file://$PWD/av-runner-deployment.yaml --stack-name av-runner-deploy --parameters ParameterKey=StackName,ParameterValue=av-ecs
+#+end_src
+
+***** Analyze stack
+
+#+begin_src sh :results raw drawer
+aws cloudformation create-stack --template-body file://$PWD/av-analyze-deployment.yaml --stack-name av-analyze-deploy --parameters ParameterKey=StackName,ParameterValue=av-ecs
 #+end_src
 
 
