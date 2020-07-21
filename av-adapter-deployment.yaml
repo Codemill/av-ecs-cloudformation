@@ -166,8 +166,7 @@ Resources:
             - Name: QUARKUS_VERTX_CLUSTER_HOST
               Value: "0.0.0.0"
             - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_HOST
-              Value: "dev-backend"
-
+              Value: !Join ['', [!Ref 'ServiceName', '.av.local']]
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
@@ -225,12 +224,6 @@ Resources:
       ServiceRegistries:
         - RegistryArn: !GetAtt DiscoveryService.Arn
           Port: 8080
-        - RegistryArn: !GetAtt DiscoveryService.Arn
-          Port: 5700
-        - RegistryArn: !GetAtt DiscoveryService.Arn
-          Port: 5701
-        - RegistryArn: !GetAtt DiscoveryService.Arn
-          Port: 5702
 
   # A target group. This is used for keeping track of all the tasks, and
   # what IP addresses / port numbers they have. You can query it yourself,
