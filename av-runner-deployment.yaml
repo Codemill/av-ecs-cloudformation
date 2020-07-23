@@ -16,7 +16,7 @@ Parameters:
     Description: The ecr repo and tag to use for image deployment
   RepoImage:
     Type: String
-    Default: accurate-player-jobs
+    Default: accurate-video-jobs
     Description: The ecr repo and tag to use for image deployment
   ImageTag:
     Type: String
