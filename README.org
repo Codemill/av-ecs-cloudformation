@@ -1,6 +1,7 @@
 #+TITLE: AV on ECS
 
-Cloudformation stacks for getting AV up and running on ECS targeting Fargate
+Cloudformation stacks for getting AV up and running on ECS targeting Fargate.
+These stacks are based on templates provided by Amazon [[https://github.com/awslabs/aws-cloudformation-templates/tree/master/aws/services/ECS][here]].
 
 Disclaimer:
 #+begin_quote
@@ -19,7 +20,6 @@ The stacks configures:
 - IAM Roles
 - ECS Cluster
 - Cloudwatch
-
 
 
 *** aws cli with cloudformation
@@ -57,11 +57,34 @@ First we need to build a new docker image with the correct configuration in
 order to be able to deploy the frontend application. In order to do this you
 need to:
 
-1. create a file in in the assets folder called settings.js based on the settings-template.js
+1. create a file in in the assets/frontend folder called settings.js based on the settings-template.js
 2. Log into codemill-docker.jfrog.io with supplied credentials
 3. Build the new image
     #+begin_src sh :results raw drawer
-    docker build . -f assets/Dockerfile -t  av-qc:4.0.2
+    docker build . -f assets/Dockerfile.frontend -t  av-qc:4.0.2
+    #+end_src
+4. Tag the image with the correct ECR repsository
+    #+begin_src sh :results raw drawer
+    docker tag av-qc:4.0.2 653767197116.dkr.ecr.eu-north-1.amazonaws.com/accurate-video-qc:4.0.2
+    #+end_src
+5. Login to the ECR repository
+    #+begin_src sh :results raw drawer
+    aws ecr get-login-password --region eu-north-1 | docker login --username AWS --password-stdin 653767197116.dkr.ecr.eu-north-1.amazonaws.com
+    #+end_src
+6. Push the image to the ECR repository
+    #+begin_src sh :results raw drawer
+    docker push 653767197116.dkr.ecr.eu-north-1.amazonaws.com/accurate-video-qc:4.0.2
+    #+end_src
+*** 4. Building and tagging the jobs image
+First we need to build a new docker image with the correct configuration in
+order to be able to deploy the jobs application. In order to do this you
+need to:
+
+1. create a file in in the assets/jobs folder called cluster.xml based on cluster-template.xml
+2. Log into codemill-docker.jfrog.io with supplied credentials
+3. Build the new image
+    #+begin_src sh :results raw drawer
+    docker build . -f assets/Dockerfile.frontend -t  av-qc:4.0.2
     #+end_src
 4. Tag the image with the correct ECR repsository
     #+begin_src sh :results raw drawer
@@ -83,6 +106,8 @@ Steps to get application deployed
 **** Deploy stacks
 
 We need to reference the ECS instance stack to get output variables defined in that stack
+
+*Important:* You need to replace the ~RegistryCredentias~ parameter with the arn for the secret create above
 
 ***** Frontend stack
 This creates the AV frontend stack

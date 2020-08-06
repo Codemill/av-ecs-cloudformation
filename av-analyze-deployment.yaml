@@ -151,6 +151,9 @@ Resources:
   Service:
     Type: AWS::ECS::Service
     DependsOn: LoadBalancerRule
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT10M
     Properties:
       ServiceName: !Ref 'ServiceName'
       Cluster:

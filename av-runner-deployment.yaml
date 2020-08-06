@@ -1,11 +1,12 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Description: Deploy a service on AWS Fargate, hosted in a private subnet
 Parameters:
   StackName:
     Type: String
     Default: production
-    Description: The name of the parent Fargate networking stack that you created. Necessary
-                 to locate and reference resources created by that stack.
+    Description:
+      The name of the parent Fargate networking stack that you created. Necessary
+      to locate and reference resources created by that stack.
   ServiceName:
     Type: String
     Default: av-runner
@@ -41,12 +42,12 @@ Parameters:
   Role:
     Type: String
     Default: ""
-    Description: (Optional) An IAM role to give the service's containers if the code within needs to
-                 access other AWS resources like S3 buckets, DynamoDB tables, etc
+    Description:
+      (Optional) An IAM role to give the service's containers if the code within needs to
+      access other AWS resources like S3 buckets, DynamoDB tables, etc
 
 Conditions:
-  HasCustomRole: !Not [ !Equals [!Ref 'Role', ''] ]
-
+  HasCustomRole: !Not [!Equals [!Ref "Role", ""]]
 
 # The task definition. This is a simple metadata description of what
 # container to run, and what resource requirements it has.
@@ -57,71 +58,48 @@ Resources:
       ResourceSignal:
         Timeout: PT10M
     Properties:
-      Family: !Ref 'ServiceName'
-      Cpu: !Ref 'ContainerCpu'
-      Memory: !Ref 'ContainerMemory'
+      Family: !Ref "ServiceName"
+      Cpu: !Ref "ContainerCpu"
+      Memory: !Ref "ContainerMemory"
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
       ExecutionRoleArn:
-        Fn::ImportValue:
-          !Join [':', [!Ref 'StackName', 'ECSTaskExecutionRole']]
+        Fn::ImportValue: !Join [":", [!Ref "StackName", "ECSTaskExecutionRole"]]
       TaskRoleArn:
         Fn::If:
-          - 'HasCustomRole'
-          - !Ref 'Role'
+          - "HasCustomRole"
+          - !Ref "Role"
           - !Ref "AWS::NoValue"
       ContainerDefinitions:
-        - Name: !Ref 'ServiceName'
-          Cpu: !Ref 'ContainerCpu'
-          Memory: !Ref 'ContainerMemory'
-          Image:
-            !Sub
-              - "${repoName}/${repoImage}:${imageTag}"
-              - repoName: !Ref RepoName
-                repoImage: !Ref RepoImage
-                imageTag: !Ref ImageTag
+        - Name: !Ref "ServiceName"
+          Cpu: !Ref "ContainerCpu"
+          Memory: !Ref "ContainerMemory"
+          Image: !Sub
+            - "${repoName}/${repoImage}:${imageTag}"
+            - repoName: !Ref RepoName
+              repoImage: !Ref RepoImage
+              imageTag: !Ref ImageTag
           RepositoryCredentials:
-            CredentialsParameter: !Ref 'RegistryCredentias'
+            CredentialsParameter: !Ref "RegistryCredentias"
           PortMappings:
-            - ContainerPort: 5700
             - ContainerPort: 5701
-            - ContainerPort: 5702
           LogConfiguration:
-            LogDriver: 'awslogs'
+            LogDriver: "awslogs"
             Options:
               awslogs-group:
-                Fn::ImportValue:
-                  !Join [':', [!Ref 'StackName', 'AVLogGroup']]
+                Fn::ImportValue: !Join [":", [!Ref "StackName", "AVLogGroup"]]
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
           Environment:
             - Name: QUARKUS_VERTX_CLUSTER_HOST
               Value: "0.0.0.0"
             - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_HOST
-              Value: !Join ['', [!Ref 'ServiceName', '.av.local']]
+              Value: !Join ["", [!Ref "ServiceName", ".av.local"]]
             - Name: AP_ADAPTER_URL_MP_REST_URL
-              Value: 'http://av-adapter.av.local:8080'
+              Value: "http://av-adapter.av.local:8080"
             - Name: AV_RUNNER_BINDIR
               Value: "/usr/local/bin"
-
-  DiscoveryService:
-    Type: AWS::ServiceDiscovery::Service
-    Properties:
-      Description: Discovery Service for the Demo Application
-      DnsConfig:
-        RoutingPolicy: MULTIVALUE
-        DnsRecords:
-          - TTL: 60
-            Type: A
-          - TTL: 60
-            Type: SRV
-      HealthCheckCustomConfig:
-        FailureThreshold: 1
-      Name: !Ref 'ServiceName'
-      NamespaceId:
-        Fn::ImportValue:
-          !Join [':', [!Ref 'StackName', 'PrivateDNSNamespace']]
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
@@ -129,26 +107,22 @@ Resources:
   Service:
     Type: AWS::ECS::Service
     Properties:
-      ServiceName: !Ref 'ServiceName'
+      ServiceName: !Ref "ServiceName"
       Cluster:
-        Fn::ImportValue:
-          !Join [':', [!Ref 'StackName', 'ClusterName']]
+        Fn::ImportValue: !Join [":", [!Ref "StackName", "ClusterName"]]
       LaunchType: FARGATE
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 75
-      DesiredCount: !Ref 'DesiredCount'
+      DesiredCount: !Ref "DesiredCount"
       NetworkConfiguration:
         AwsvpcConfiguration:
           SecurityGroups:
             - Fn::ImportValue:
-                !Join [':', [!Ref 'StackName', 'FargateContainerSecurityGroup']]
+                !Join [":", [!Ref "StackName", "FargateContainerSecurityGroup"]]
           Subnets:
             - Fn::ImportValue:
-                !Join [':', [!Ref 'StackName', 'PrivateSubnetOne']]
+                !Join [":", [!Ref "StackName", "PrivateSubnetOne"]]
             - Fn::ImportValue:
-                !Join [':', [!Ref 'StackName', 'PrivateSubnetTwo']]
-      TaskDefinition: !Ref 'TaskDefinition'
-      ServiceRegistries:
-        - RegistryArn: !GetAtt DiscoveryService.Arn
-          Port: 5700
+                !Join [":", [!Ref "StackName", "PrivateSubnetTwo"]]
+      TaskDefinition: !Ref "TaskDefinition"
