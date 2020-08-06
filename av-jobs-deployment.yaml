@@ -13,7 +13,7 @@ Parameters:
     Description: A name for the service
   RepoName:
     Type: String
-    Default: codemill-docker.jfrog.io/accurate-player
+    Default: 653767197116.dkr.ecr.eu-north-1.amazonaws.com
     Description: The ecr repo and tag to use for image deployment
   RepoImage:
     Type: String
@@ -21,7 +21,7 @@ Parameters:
     Description: The ecr repo and tag to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.0.2
+    Default: 4.0.3
     Description: The ecr repo and tag to use for image deployment
   RegistryCredentias:
     Type: String
