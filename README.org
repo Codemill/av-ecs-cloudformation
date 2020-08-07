@@ -81,25 +81,40 @@ order to be able to deploy the jobs application. In order to do this you
 need to:
 
 1. create a file in in the assets/jobs folder called cluster.xml based on cluster-template.xml
-2. Log into codemill-docker.jfrog.io with supplied credentials
+2. Build the new image
+    #+begin_src sh :results raw drawer
+    docker build . -f assets/Dockerfile.jobs -t  av-jobs:4.0.3
+    #+end_src
+3. Tag the image with the correct ECR repsository
+    #+begin_src sh :results raw drawer
+    docker tag av-jobs:4.0.3 653767197116.dkr.ecr.eu-north-1.amazonaws.com/accurate-video-jobs:4.0.3
+    #+end_src
+4. Push the image to the ECR repository
+    #+begin_src sh :results raw drawer
+    docker push 653767197116.dkr.ecr.eu-north-1.amazonaws.com/accurate-video-jobs:4.0.3
+    #+end_src
+
+*** 5. Building and tagging the adapter image
+First we need to build a new docker image with the correct configuration in
+order to be able to deploy the jobs application. In order to do this you
+need to:
+
+1. create a file in the assets/adapter folder called cluster.xml based on cluster-template.xml
+2. create a prod-users.properties and prod-roles.properties file in the assets/adapters folder. You can read more about file based auth here [[https://quarkus.io/guides/security-properties][quarkus with elytron]]
 3. Build the new image
     #+begin_src sh :results raw drawer
-    docker build . -f assets/Dockerfile.frontend -t  av-qc:4.0.2
+    docker build . -f assets/Dockerfile.adapter -t  av-adapter:4.0.3-api
     #+end_src
 4. Tag the image with the correct ECR repsository
     #+begin_src sh :results raw drawer
-    docker tag av-qc:4.0.2 653767197116.dkr.ecr.eu-north-1.amazonaws.com/accurate-video-qc:4.0.2
+    docker tag av-adapter:4.0.3-api 653767197116.dkr.ecr.eu-north-1.amazonaws.com/accurate-video-adapter:4.0.3-api
     #+end_src
-5. Login to the ECR repository
+5. Push the image to the ECR repository
     #+begin_src sh :results raw drawer
-    aws ecr get-login-password --region eu-north-1 | docker login --username AWS --password-stdin 653767197116.dkr.ecr.eu-north-1.amazonaws.com
-    #+end_src
-6. Push the image to the ECR repository
-    #+begin_src sh :results raw drawer
-    docker push 653767197116.dkr.ecr.eu-north-1.amazonaws.com/accurate-video-qc:4.0.2
+    docker push 653767197116.dkr.ecr.eu-north-1.amazonaws.com/accurate-video-adapter:4.0.3-api
     #+end_src
 
-*** 4. Deploying applications
+*** 5. Deploying applications
 
 Steps to get application deployed
 
@@ -122,10 +137,11 @@ aws cloudformation create-stack --template-body file://$PWD/av-frontend-deployme
 aws cloudformation create-stack --template-body file://$PWD/av-adapter-deployment.yaml --stack-name av-adapter-deploy --parameters ParameterKey=StackName,ParameterValue=av-ecs
 #+end_src
 
-***** Runner stack
+***** Jobs stack
+You need to send the password that you set in the prod-users.properties file as a parameter value when you create the jobs stack
 
 #+begin_src sh :results raw drawer
-aws cloudformation create-stack --template-body file://$PWD/av-runner-deployment.yaml --stack-name av-runner-deploy --parameters ParameterKey=StackName,ParameterValue=av-ecs
+aws cloudformation create-stack --template-body file://$PWD/av-jobs-deployment.yaml --stack-name av-jobs-deploy --parameters ParameterKey=StackName,ParameterValue=av-ecs ParameterKey=AdapterPassword,ParameterValue=*****
 #+end_src
 
 ***** Analyze stack

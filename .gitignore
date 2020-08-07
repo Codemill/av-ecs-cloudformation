@@ -6,3 +6,5 @@ tmp/
 settings.js
 keycloak.json
 cluster.xml
+prod-users.properties
+prod-roles.properties

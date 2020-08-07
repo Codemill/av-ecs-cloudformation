@@ -1,0 +1,3 @@
+From codemill-docker.jfrog.io/accurate-player/accurate-player-adapter-postgres:4.0.3-api
+
+COPY ./assets/adapter/* /opt/

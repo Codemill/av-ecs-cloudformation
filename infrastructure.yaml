@@ -483,13 +483,13 @@ Resources:
       RepositoryName: "accurate-video-qc"
 
   # ECR repository for pushing frontend images
-  AVQCRepository:
+  AVJobsRepository:
     Type: AWS::ECR::Repository
     Properties:
       RepositoryName: "accurate-video-jobs"
 
   # ECR repository for pushing frontend images
-  AVQCRepository:
+  AVAdapterRepository:
     Type: AWS::ECR::Repository
     Properties:
       RepositoryName: "accurate-video-adapter"

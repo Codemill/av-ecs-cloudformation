@@ -9,20 +9,16 @@ Parameters:
       to locate and reference resources created by that stack.
   ServiceName:
     Type: String
-    Default: av-runner
+    Default: av-jobs
     Description: A name for the service
-  RepoName:
-    Type: String
-    Default: 653767197116.dkr.ecr.eu-north-1.amazonaws.com
-    Description: The ecr repo and tag to use for image deployment
-  RepoImage:
+  ECRRepoName:
     Type: String
     Default: accurate-video-jobs
     Description: The ecr repo and tag to use for image deployment
-  ImageTag:
+  ECRImageTag:
     Type: String
     Default: 4.0.3
-    Description: The ecr repo and tag to use for image deployment
+    Description: The ecr tag to use for image deployment
   RegistryCredentias:
     Type: String
     Default: arn:aws:secretsmanager:eu-north-1:653767197116:secret:jfrog-docker-gitlabci-50X7p1
@@ -39,6 +35,14 @@ Parameters:
     Type: Number
     Default: 2
     Description: How many copies of the service task to run
+  AdapterUsername:
+    Type: String
+    Default: runner
+    Description: User name in the adapter to use with the jobs module
+  AdapterPassword:
+    Type: String
+    Default: ""
+    Description: Passwor in the adapter for the runner user
   Role:
     Type: String
     Default: ""
@@ -76,10 +80,11 @@ Resources:
           Cpu: !Ref "ContainerCpu"
           Memory: !Ref "ContainerMemory"
           Image: !Sub
-            - "${repoName}/${repoImage}:${imageTag}"
-            - repoName: !Ref RepoName
-              repoImage: !Ref RepoImage
-              imageTag: !Ref ImageTag
+            - "${accountId}.dkr.ecr.${region}.amazonaws.com/${repoName}:${imageTag}"
+            - accountId: !Ref AWS::AccountId
+              region: !Ref AWS::Region
+              repoName: !Ref ECRRepoName
+              imageTag: !Ref ECRImageTag
           RepositoryCredentials:
             CredentialsParameter: !Ref "RegistryCredentias"
           PortMappings:
@@ -98,8 +103,10 @@ Resources:
               Value: !Join ["", [!Ref "ServiceName", ".av.local"]]
             - Name: AP_ADAPTER_URL_MP_REST_URL
               Value: "http://av-adapter.av.local:8080"
-            - Name: AV_RUNNER_BINDIR
-              Value: "/usr/local/bin"
+            - Name: AP_ADAPTER_USERNAME
+              Value: !Ref AdapterUsername
+            - Name: AP_ADAPTER_PASSWORD
+              Value: !Ref AdapterPassword
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well

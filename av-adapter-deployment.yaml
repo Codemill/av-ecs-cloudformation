@@ -1,11 +1,12 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Description: Deploy a service on AWS Fargate, hosted in a private subnet, but accessible via a public load balancer.
 Parameters:
   StackName:
     Type: String
     Default: production
-    Description: The name of the parent Fargate networking stack that you created. Necessary
-                 to locate and reference resources created by that stack.
+    Description:
+      The name of the parent Fargate networking stack that you created. Necessary
+      to locate and reference resources created by that stack.
   ServiceName:
     Type: String
     Default: av-adapter
@@ -14,17 +15,17 @@ Parameters:
     Type: String
     Default: accurateVideo
     Description: A name for the database
-  RepoName:
+  ECRRepoName:
     Type: String
-    Default: codemill-docker.jfrog.io/accurate-player
+    Default: accurate-video-adapter
     Description: The ecr repo and tag to use for image deployment
-  RepoImage:
+  ECRImageTag:
     Type: String
-    Default: accurate-player-adapter-postgres
-    Description: The ecr repo and tag to use for image deployment
+    Default: 4.0.3-api
+    Description: The ecr tag to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.0.2-api
+    Default: 4.0.3-api
     Description: The ecr repo and tag to use for image deployment
   RegistryCredentias:
     Type: String
@@ -46,14 +47,14 @@ Parameters:
     Type: String
     Default: "/api/*"
     Description: A path on the public load balancer that this service
-                 should be connected to. Use * to send all load balancer
-                 traffic to this service.
+      should be connected to. Use * to send all load balancer
+      traffic to this service.
   Priority:
     Type: Number
     Default: 2
     Description: The priority for the routing rule added to the load balancer.
-                 This only applies if your have multiple services which have been
-                 assigned to different paths on the load balancer.
+      This only applies if your have multiple services which have been
+      assigned to different paths on the load balancer.
   DesiredCount:
     Type: Number
     Default: 2
@@ -61,12 +62,12 @@ Parameters:
   Role:
     Type: String
     Default: ""
-    Description: (Optional) An IAM role to give the service's containers if the code within needs to
-                 access other AWS resources like S3 buckets, DynamoDB tables, etc
+    Description:
+      (Optional) An IAM role to give the service's containers if the code within needs to
+      access other AWS resources like S3 buckets, DynamoDB tables, etc
 
 Conditions:
-  HasCustomRole: !Not [ !Equals [!Ref 'Role', ''] ]
-
+  HasCustomRole: !Not [!Equals [!Ref "Role", ""]]
 
 # The task definition. This is a simple metadata description of what
 # container to run, and what resource requirements it has.
@@ -77,43 +78,41 @@ Resources:
       ResourceSignal:
         Timeout: PT10M
     Properties:
-      Family: !Ref 'ServiceName'
-      Cpu: !Ref 'ContainerCpu'
-      Memory: !Ref 'ContainerMemory'
+      Family: !Ref "ServiceName"
+      Cpu: !Ref "ContainerCpu"
+      Memory: !Ref "ContainerMemory"
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
       ExecutionRoleArn:
-        Fn::ImportValue:
-          !Join [':', [!Ref 'StackName', 'ECSTaskExecutionRole']]
+        Fn::ImportValue: !Join [":", [!Ref "StackName", "ECSTaskExecutionRole"]]
       TaskRoleArn:
         Fn::If:
-          - 'HasCustomRole'
-          - !Ref 'Role'
+          - "HasCustomRole"
+          - !Ref "Role"
           - !Ref "AWS::NoValue"
       ContainerDefinitions:
-        - Name: !Ref 'ServiceName'
-          Cpu: !Ref 'ContainerCpu'
-          Memory: !Ref 'ContainerMemory'
-          Image:
-            !Sub
-              - "${repoName}/${repoImage}:${imageTag}"
-              - repoName: !Ref RepoName
-                repoImage: !Ref RepoImage
-                imageTag: !Ref ImageTag
+        - Name: !Ref "ServiceName"
+          Cpu: !Ref "ContainerCpu"
+          Memory: !Ref "ContainerMemory"
+          Image: !Sub
+            - "${accountId}.dkr.ecr.${region}.amazonaws.com/${repoName}:${imageTag}"
+            - accountId: !Ref AWS::AccountId
+              region: !Ref AWS::Region
+              repoName: !Ref ECRRepoName
+              imageTag: !Ref ECRImageTag
           RepositoryCredentials:
-            CredentialsParameter: !Ref 'RegistryCredentias'
+            CredentialsParameter: !Ref "RegistryCredentias"
           PortMappings:
-            - ContainerPort: !Ref 'ContainerPort'
+            - ContainerPort: !Ref "ContainerPort"
             - ContainerPort: 5700
             - ContainerPort: 5701
             - ContainerPort: 5702
           LogConfiguration:
-            LogDriver: 'awslogs'
+            LogDriver: "awslogs"
             Options:
               awslogs-group:
-                Fn::ImportValue:
-                  !Join [':', [!Ref 'StackName', 'AVLogGroup']]
+                Fn::ImportValue: !Join [":", [!Ref "StackName", "AVLogGroup"]]
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
           Environment:
@@ -142,13 +141,12 @@ Resources:
             - Name: QUARKUS_DATASOURCE_USERNAME
               Value: "postgres"
             - Name: QUARKUS_DATASOURCE_URL
-              Value:
-                !Sub
-                  - "jdbc:postgresql://${DBUrl}/${dbName}"
-                  - DBUrl:
-                      Fn::ImportValue:
-                        !Join [':', [!Ref 'StackName', 'DBEndpoint']]
-                    dbName: !Ref 'DBName'
+              Value: !Sub
+                - "jdbc:postgresql://${DBUrl}/${dbName}"
+                - DBUrl:
+                    Fn::ImportValue:
+                      !Join [":", [!Ref "StackName", "DBEndpoint"]]
+                  dbName: !Ref "DBName"
             - Name: QUARKUS_FLYWAY_BASELINE-ON-MIGRATE
               Value: "false"
             - Name: QUARKUS_FLYWAY_MIGRATE-AT-START
@@ -166,7 +164,7 @@ Resources:
             - Name: QUARKUS_VERTX_CLUSTER_HOST
               Value: "0.0.0.0"
             - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_HOST
-              Value: !Join ['', [!Ref 'ServiceName', '.av.local']]
+              Value: !Join ["", [!Ref "ServiceName", ".av.local"]]
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
@@ -184,10 +182,9 @@ Resources:
             Type: SRV
       HealthCheckCustomConfig:
         FailureThreshold: 1
-      Name: !Ref 'ServiceName'
+      Name: !Ref "ServiceName"
       NamespaceId:
-        Fn::ImportValue:
-          !Join [':', [!Ref 'StackName', 'PrivateDNSNamespace']]
+        Fn::ImportValue: !Join [":", [!Ref "StackName", "PrivateDNSNamespace"]]
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
@@ -196,31 +193,30 @@ Resources:
     Type: AWS::ECS::Service
     DependsOn: LoadBalancerRule
     Properties:
-      ServiceName: !Ref 'ServiceName'
+      ServiceName: !Ref "ServiceName"
       Cluster:
-        Fn::ImportValue:
-          !Join [':', [!Ref 'StackName', 'ClusterName']]
+        Fn::ImportValue: !Join [":", [!Ref "StackName", "ClusterName"]]
       LaunchType: FARGATE
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 75
-      DesiredCount: !Ref 'DesiredCount'
+      DesiredCount: !Ref "DesiredCount"
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
           SecurityGroups:
             - Fn::ImportValue:
-                !Join [':', [!Ref 'StackName', 'FargateContainerSecurityGroup']]
+                !Join [":", [!Ref "StackName", "FargateContainerSecurityGroup"]]
           Subnets:
             - Fn::ImportValue:
-                !Join [':', [!Ref 'StackName', 'PrivateSubnetOne']]
+                !Join [":", [!Ref "StackName", "PrivateSubnetOne"]]
             - Fn::ImportValue:
-                !Join [':', [!Ref 'StackName', 'PrivateSubnetTwo']]
-      TaskDefinition: !Ref 'TaskDefinition'
+                !Join [":", [!Ref "StackName", "PrivateSubnetTwo"]]
+      TaskDefinition: !Ref "TaskDefinition"
       LoadBalancers:
-        - ContainerName: !Ref 'ServiceName'
-          ContainerPort: !Ref 'ContainerPort'
-          TargetGroupArn: !Ref 'TargetGroup'
+        - ContainerName: !Ref "ServiceName"
+          ContainerPort: !Ref "ContainerPort"
+          TargetGroupArn: !Ref "TargetGroup"
       ServiceRegistries:
         - RegistryArn: !GetAtt DiscoveryService.Arn
           Port: 8080
@@ -239,27 +235,25 @@ Resources:
       HealthCheckTimeoutSeconds: 120
       HealthyThresholdCount: 2
       Matcher:
-        HttpCode: '200,401'
+        HttpCode: "200,401"
       TargetType: ip
-      Name: !Ref 'ServiceName'
-      Port: !Ref 'ContainerPort'
+      Name: !Ref "ServiceName"
+      Port: !Ref "ContainerPort"
       Protocol: HTTP
       UnhealthyThresholdCount: 2
       VpcId:
-        Fn::ImportValue:
-          !Join [':', [!Ref 'StackName', 'VPCId']]
+        Fn::ImportValue: !Join [":", [!Ref "StackName", "VPCId"]]
 
   # Create a rule on the load balancer for routing traffic to the target group
   LoadBalancerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
       Actions:
-        - TargetGroupArn: !Ref 'TargetGroup'
-          Type: 'forward'
+        - TargetGroupArn: !Ref "TargetGroup"
+          Type: "forward"
       Conditions:
         - Field: path-pattern
-          Values: [!Ref 'Path']
+          Values: [!Ref "Path"]
       ListenerArn:
-        Fn::ImportValue:
-          !Join [':', [!Ref 'StackName', 'PublicListener']]
-      Priority: !Ref 'Priority'
+        Fn::ImportValue: !Join [":", [!Ref "StackName", "PublicListener"]]
+      Priority: !Ref "Priority"
