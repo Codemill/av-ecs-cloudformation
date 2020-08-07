@@ -27,10 +27,6 @@ Parameters:
     Type: String
     Default: 4.0.3-api
     Description: The ecr repo and tag to use for image deployment
-  RegistryCredentias:
-    Type: String
-    Default: arn:aws:secretsmanager:eu-north-1:653767197116:secret:jfrog-docker-gitlabci-50X7p1
-    Description: Credentials to codemill.jfrog.io for pulling docker images
   ContainerPort:
     Type: Number
     Default: 8080
@@ -101,8 +97,6 @@ Resources:
               region: !Ref AWS::Region
               repoName: !Ref ECRRepoName
               imageTag: !Ref ECRImageTag
-          RepositoryCredentials:
-            CredentialsParameter: !Ref "RegistryCredentias"
           PortMappings:
             - ContainerPort: !Ref "ContainerPort"
             - ContainerPort: 5700
