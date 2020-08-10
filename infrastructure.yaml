@@ -455,6 +455,7 @@ Resources:
                   # Allow the ECS Tasks to discover other ecs tasks
                   - "ecs:ListTasks"
                   - "ecs:DescribeTasks"
+                  - "ec2:DescribeNetworkInterfaces"
 
                   # Allow the ECS Tasks to download images from ECR
                   - "ecr:GetAuthorizationToken"
