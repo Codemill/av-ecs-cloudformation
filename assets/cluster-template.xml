@@ -19,7 +19,9 @@
     <network>
         <join>
             <multicast enabled="false"/>
-            <aws enabled="true" />
+            <aws enabled="true">
+                <region>eu-north-1</region>
+            </aws>
         </join>
         <interfaces enabled="true">
             <interface>10.0.*.*</interface>

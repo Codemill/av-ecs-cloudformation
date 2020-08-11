@@ -128,7 +128,7 @@ We need to reference the ECS instance stack to get output variables defined in t
 This creates the AV frontend stack
 
 #+begin_src sh :results raw drawer
-aws cloudformation create-stack --template-body file://$PWD/av-frontend-deployment.yaml --stack-name av-on-ecs --parameters ParameterKey=StackName,ParameterValue=av-ecs ParameterKey=ECRRepoName,ParameterValue="accurate-video-qc:4.0.2"
+aws cloudformation create-stack --template-body file://$PWD/av-frontend-deployment.yaml --stack-name av-frontend-deploy --parameters ParameterKey=StackName,ParameterValue=av-ecs
 #+end_src
 
 ***** Adapter stack
@@ -154,7 +154,7 @@ aws cloudformation create-stack --template-body file://$PWD/av-analyze-deploymen
 **** Update frontend deployment stack
 
 #+begin_src sh :results raw drawer
-aws cloudformation update-stack --template-body file://$PWD/av-frontend-deployment.yaml --stack-name av-on-ecs --parameters ParameterKey=StackName,ParameterValue=av-ecs ParameterKey=ECRRepoName,ParameterValue="accurate-video-qc:4.0.2"
+aws cloudformation update-stack --template-body file://$PWD/av-frontend-deployment.yaml --stack-name av-frontend-deploy --parameters ParameterKey=StackName,ParameterValue=av-ecs
 #+end_src
 
 
