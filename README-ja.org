@@ -1,0 +1,132 @@
+#+TITLE: AV on ECS
+
+FCS Fargate で Accurate Video をインストールする CloudFormation テンプレート
+
+Disclaimer:
+#+begin_quote
+AWS にデプロイするリソースは全て冗長化するのがベストプラクティス
+#+end_quote
+
+CloudFormation テンプレートで以下のリソースを設定: 
+- VPC
+- Networking
+  - NAT
+  - Gateway
+  - Servicediscovery
+  - Routing
+  - etc.
+- RDS
+- IAM Roles
+- ECS Cluster
+- Cloudwatch
+
+*** aws cli で cloudformation テンプレートの実行
+
+AWS コンソールからでも実行できますが、本チュートリアルではAWS CLI を使ってテンプレートを実行します。
+
+#+begin_src sh :results raw drawer
+aws cloudformation describe-stacks --output json
+#+end_src
+
+*** 1. インフラの準備
+
+**** ECSクラスターの起動とそれに必要なインフラの構築（VPC、サブネット、DBなど）
+
+#+begin_src sh :results raw drawer
+aws cloudformation create-stack --template-body file://$PWD/infrastructure.yaml --stack-name av-ecs --capabilities CAPABILITY_IAM
+#+end_src
+
+**** インフラのアップデート
+
+#+begin_src sh :results raw drawer
+aws cloudformation update-stack --template-body file://$PWD/infrastructure.yaml --stack-name av-ecs --capabilities CAPABILITY_IAM
+#+end_src
+
+*** 2. docker auth 用クレデンシャルをAWS に追加
+AWS CloudFormation テンプレートから codemill-docker.jfrog.io のリポジトリにあるDockerイメージにアクセスできるように、codemill-docker.jfrog.io 用 docker auth ユーザ名、パスワードを AWS Secret Manager に追加します。
+
+[[https://docs.aws.amazon.com/AmazonECS/latest/developerguide/private-auth.html][aws documentation]]
+
+[[https://docs.aws.amazon.com/ja_jp/AmazonECS/latest/developerguide/private-auth.html][タスクのプライベートレジストリの認証]]
+
+1. AWS Secret Manager から 新しいシークレットを作成
+2. SecretKey は username、password、別途提供されている値を Secret Value に
+2. ECS Task Execution Role が作成したシークレットが読めることを確認（デフォルトで全シークレットが読めるパーミッション）
+3. 作成したシークレットのARNをコピー（後段のCloudFormationテンプレートで必要）
+
+*** 3. フロントエンド用のイメージのビルドとタグ付
+適切なライセンス入のフロントエンドアプリケーション用のDockerイメージをビルドします。
+
+1. assets ディレクトリに入っている settings-template.js をコピーして settings.js ファイルを作成し、"licenseKey" に適切なライセンスを入れる
+2. codemill-docker.jfrog.io に docker login (ユーザ名、パスワードは別途)
+3. フロントエンド用 Docker イメージのビルド
+
+    #+begin_src sh :results raw drawer
+    docker build . -f assets/Dockerfile -t  av-qc:4.0.2
+    #+end_src
+
+4. ビルドされたイメージのタグをECRリポジトリ用に変更（リポジトリは infrastructure.yaml によって "accurate-video-qc" という名前で作成済み、リポジトリのURIは適宜置き換え）
+
+    #+begin_src sh :results raw drawer
+    docker tag av-qc:4.0.2 653767197116.dkr.ecr.eu-north-1.amazonaws.com/accurate-video-qc:4.0.2
+    #+end_src
+
+5. ECRリポジトリへログイン
+
+    #+begin_src sh :results raw drawer
+    aws ecr get-login-password --region eu-north-1 | docker login --username AWS --password-stdin 653767197116.dkr.ecr.eu-north-1.amazonaws.com
+    #+end_src
+
+6. ECRリポジトリへ イメージをプッシュ
+
+    #+begin_src sh :results raw drawer
+    docker push 653767197116.dkr.ecr.eu-north-1.amazonaws.com/accurate-video-qc:4.0.2
+    #+end_src
+
+*** 4. AV アプリケーションのデプロイ
+
+以下の手順でアプリケーションをデプロイしていきます。
+
+**** スタックのデプロイ
+
+**インフラの準備** で構築したリソースを利用するため、infrastructure.yaml を実行したスタックの名前（--stack-name）を "ParameterKey=StackName,ParameterValue=av-ecs" で指定します。
+
+***** フロントエンドスタック (Frontend)
+AV のフロントエンドデプロイするスタック
+
+#+begin_src sh :results raw drawer
+aws cloudformation create-stack --template-body file://$PWD/av-frontend-deployment.yaml --stack-name av-on-ecs --parameters ParameterKey=StackName,ParameterValue=av-ecs ParameterKey=ECRRepoName,ParameterValue="accurate-video-qc:4.0.2"
+#+end_src
+
+***** アダプタースタック (Adapter)
+av-adapter-deployment.yaml テンプレート内の RegistryCredentias の Default を上で作成したシークレットのARNに上書きするか、aws cloudformation の実行時に、--parameters に ParameterKey=RegistryCredentias,ParameterValue=[secretのARN] を追加で指定して実行（av-runner-deployment.yaml, av-analyzer-deployment.yaml も同様）
+
+#+begin_src sh :results raw drawer
+aws cloudformation create-stack --template-body file://$PWD/av-adapter-deployment.yaml --stack-name av-adapter-deploy --parameters ParameterKey=StackName,ParameterValue=av-ecs
+#+end_src
+
+***** ランナースタック (Runner)
+
+#+begin_src sh :results raw drawer
+aws cloudformation create-stack --template-body file://$PWD/av-runner-deployment.yaml --stack-name av-runner-deploy --parameters ParameterKey=StackName,ParameterValue=av-ecs
+#+end_src
+
+***** アナライザースタック (Analyzer)
+
+#+begin_src sh :results raw drawer
+aws cloudformation create-stack --template-body file://$PWD/av-analyze-deployment.yaml --stack-name av-analyze-deploy --parameters ParameterKey=StackName,ParameterValue=av-ecs
+#+end_src
+
+
+**** Update frontend deployment stack
+
+#+begin_src sh :results raw drawer
+aws cloudformation update-stack --template-body file://$PWD/av-frontend-deployment.yaml --stack-name av-on-ecs --parameters ParameterKey=StackName,ParameterValue=av-ecs ParameterKey=ECRRepoName,ParameterValue="accurate-video-qc:4.0.2"
+#+end_src
+
+
+**** Update adapter deployment stack
+
+#+begin_src sh :results raw drawer
+aws cloudformation update-stack --template-body file://$PWD/av-adapter-deployment.yaml --stack-name av-adapter-deploy --parameters ParameterKey=StackName,ParameterValue=av-ecs
+#+end_src
