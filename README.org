@@ -161,5 +161,11 @@ aws cloudformation update-stack --template-body file://$PWD/av-frontend-deployme
 **** Update adapter deployment stack
 
 #+begin_src sh :results raw drawer
-aws cloudformation update-stack --template-body file://$PWD/av-adapter-deployment.yaml --stack-name av-adapter-deploy --parameters ParameterKey=StackName,ParameterValue=av-ecs
+aws cloudformation update-stack --template-body file://$PWD/av-adapter-deployment.yaml --stack-name av-adapter-deploy --parameters ParameterKey=StackName,ParameterValue=av-ecs ParameterKey=ECRImageTag,ParameterValue=4.0.4-api
+#+end_src
+
+**** Update jobs deployment stack
+
+#+begin_src sh :results raw drawer
+aws cloudformation update-stack --template-body file://$PWD/av-jobs-deployment.yaml --stack-name av-jobs-deploy --parameters ParameterKey=StackName,ParameterValue=av-ecs ParameterKey=ECRImageTag,ParameterValue=4.0.4
 #+end_src
