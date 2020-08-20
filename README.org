@@ -161,11 +161,11 @@ aws cloudformation update-stack --template-body file://$PWD/av-frontend-deployme
 **** Update adapter deployment stack
 
 #+begin_src sh :results raw drawer
-aws cloudformation update-stack --template-body file://$PWD/av-adapter-deployment.yaml --stack-name av-adapter-deploy --parameters ParameterKey=StackName,ParameterValue=av-ecs ParameterKey=ECRImageTag,ParameterValue=4.0.4-api
+aws cloudformation update-stack --template-body file://$PWD/av-adapter-deployment.yaml --stack-name av-adapter-deploy --parameters ParameterKey=StackName,ParameterValue=av-ecs ParameterKey=ECRImageTag,ParameterValue=4.0.4-api ParameterKey=Role,ParameterValue=arn:aws:iam::653767197116:role/av-ecs-ECSTaskRole-V2GYP3Y2H3AQ
 #+end_src
 
 **** Update jobs deployment stack
 
 #+begin_src sh :results raw drawer
-aws cloudformation update-stack --template-body file://$PWD/av-jobs-deployment.yaml --stack-name av-jobs-deploy --parameters ParameterKey=StackName,ParameterValue=av-ecs ParameterKey=ECRImageTag,ParameterValue=4.0.4
+aws cloudformation update-stack --template-body file://$PWD/av-jobs-deployment.yaml --stack-name av-jobs-deploy --parameters ParameterKey=StackName,ParameterValue=av-ecs ParameterKey=ECRImageTag,ParameterValue=4.0.4 ParameterKey=Role,ParameterValue=arn:aws:iam::653767197116:role/av-ecs-ECSTaskRole-V2GYP3Y2H3AQ
 #+end_src

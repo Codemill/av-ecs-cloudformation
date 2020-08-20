@@ -436,6 +436,30 @@ Resources:
                 Resource: "*"
 
   # This is a role which is used by the ECS tasks themselves.
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ecs-tasks.amazonaws.com]
+            Action: ["sts:AssumeRole"]
+      Path: /
+      Policies:
+        - PolicyName: ecs-task-role
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  # Allow the ECS Tasks to discover other ecs tasks
+                  - "ecs:ListTasks"
+                  - "ecs:DescribeTasks"
+                  - "ec2:DescribeNetworkInterfaces"
+                  - "ec2:DescribeInstances"
+                Resource: "*"
+
+  # This is a role which is used by the ECS tasks themselves.
   ECSTaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -452,11 +476,6 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  # Allow the ECS Tasks to discover other ecs tasks
-                  - "ecs:ListTasks"
-                  - "ecs:DescribeTasks"
-                  - "ec2:DescribeNetworkInterfaces"
-
                   # Allow the ECS Tasks to download images from ECR
                   - "ecr:GetAuthorizationToken"
                   - "ecr:BatchCheckLayerAvailability"
@@ -540,6 +559,11 @@ Outputs:
     Value: !GetAtt "ECSTaskExecutionRole.Arn"
     Export:
       Name: !Join [":", [!Ref "AWS::StackName", "ECSTaskExecutionRole"]]
+  ECSTaskRole:
+    Description: The ARN of the ECS role
+    Value: !GetAtt "ECSTaskRole.Arn"
+    Export:
+      Name: !Join [":", [!Ref "AWS::StackName", "ECSTaskRole"]]
   PublicListener:
     Description: The ARN of the public load balancer's Listener
     Value: !Ref PublicLoadBalancerListener
