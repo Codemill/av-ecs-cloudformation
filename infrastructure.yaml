@@ -502,13 +502,7 @@ Resources:
     Properties:
       RepositoryName: "accurate-video-qc"
 
-  # ECR repository for pushing frontend images
-  AVJobsRepository:
-    Type: AWS::ECR::Repository
-    Properties:
-      RepositoryName: "accurate-video-jobs"
-
-  # ECR repository for pushing frontend images
+  # ECR repository for pushing adapter images
   AVAdapterRepository:
     Type: AWS::ECR::Repository
     Properties:

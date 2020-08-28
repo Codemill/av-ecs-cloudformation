@@ -1,3 +1,0 @@
-From codemill-docker.jfrog.io/accurate-player/accurate-video-jobs:4.0.3
-
-ADD ./assets/jobs/cluster.xml /opt/cluster.xml

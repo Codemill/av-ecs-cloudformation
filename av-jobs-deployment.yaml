@@ -11,14 +11,22 @@ Parameters:
     Type: String
     Default: av-jobs
     Description: A name for the service
-  ECRRepoName:
+  RepoName:
+    Type: String
+    Default: codemill-docker.jfrog.io/accurate-player
+    Description: The codemill repo
+  RepoImage:
     Type: String
     Default: accurate-video-jobs
     Description: The ecr repo and tag to use for image deployment
-  ECRImageTag:
+  ImageTag:
     Type: String
     Default: 4.0.3
     Description: The ecr tag to use for image deployment
+  RegistryCredentias:
+    Type: String
+    Default: arn:aws:secretsmanager:eu-north-1:653767197116:secret:jfrog-docker-gitlabci-50X7p1
+    Description: Credentials to codemill.jfrog.io for pulling docker images
   ContainerCpu:
     Type: Number
     Default: 256
@@ -76,11 +84,12 @@ Resources:
           Cpu: !Ref "ContainerCpu"
           Memory: !Ref "ContainerMemory"
           Image: !Sub
-            - "${accountId}.dkr.ecr.${region}.amazonaws.com/${repoName}:${imageTag}"
-            - accountId: !Ref AWS::AccountId
-              region: !Ref AWS::Region
-              repoName: !Ref ECRRepoName
-              imageTag: !Ref ECRImageTag
+            - "${repoName}/${repoImage}:${imageTag}"
+            - repoName: !Ref RepoName
+              repoImage: !Ref RepoImage
+              imageTag: !Ref ImageTag
+          RepositoryCredentials:
+            CredentialsParameter: !Ref "RegistryCredentials"
           PortMappings:
             - ContainerPort: 5701
           LogConfiguration:
