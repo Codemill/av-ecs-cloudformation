@@ -498,6 +498,8 @@ Resources:
                   - "s3:Describe*"
                   - "s3:List*"
                   - "s3:Read*"
+                  - "s3:HeadObject"
+                  - "s3:GetObject"
                 Resource: "*"
 
   # ECR repository for pushing frontend images
