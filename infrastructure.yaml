@@ -494,6 +494,10 @@ Resources:
                   # Allow the ECS tasks to upload logs to CloudWatch
                   - "logs:CreateLogStream"
                   - "logs:PutLogEvents"
+
+                  - "s3:Describe*"
+                  - "s3:List*"
+                  - "s3:Read*"
                 Resource: "*"
 
   # ECR repository for pushing frontend images
@@ -513,6 +517,8 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: "AVLogGroup"
+
+
 
 # These are the values output by the CloudFormation template. Be careful
 # about changing any of them, because of them are exported with specific

@@ -13,11 +13,11 @@ Parameters:
     Description: A name for the service
   ECRRepoName:
     Type: String
-    Default: accurate-video-qc
+    Default: codemill-docker.jfrog.io/accurate-player/accurate-player-qc
     Description: The ecr repo and tag to use for image deployment
   ECRImageTag:
     Type: String
-    Default: 4.0.2
+    Default: v4.0.2
     Description: The ecr repo and tag to use for image deployment
   ContainerPort:
     Type: Number
@@ -53,6 +53,14 @@ Parameters:
     Description:
       (Optional) An IAM role to give the service's containers if the code within needs to
       access other AWS resources like S3 buckets, DynamoDB tables, etc
+  RegistryCredentials:
+    Type: String
+    Default: arn:aws:secretsmanager:eu-north-1:653767197116:secret:jfrog-docker-gitlabci-50X7p1
+    Description: Credentials to codemill.jfrog.io for pulling docker images
+
+  ConfigBucket:
+    Type: String
+    Default: av-ecs-config
 
 Conditions:
   HasCustomRole: !Not [!Equals [!Ref "Role", ""]]
@@ -79,15 +87,39 @@ Resources:
       ContainerDefinitions:
         - Name: !Ref "ServiceName"
           Cpu: !Ref "ContainerCpu"
+          Command:
+            - apk add python3 curl; curl "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip"; unzip awscli-bundle.zip; ln -s /usr/bin/python3 /usr/bin/python; echo hej; python3 awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws; echo hej2
+            # - !Sub "/bin/sh -c echo hej; apk update; apk add aws-cli; aws s3 cp s3://${ConfigBucket}/settings.js /usr/share/nginx/html/assets/json/settings.js; nginx -g daemon off;"
+          EntryPoint:
+            - "sh"
+            - "-c"
           Memory: !Ref "ContainerMemory"
-          Image: !Sub
-            - "${accountId}.dkr.ecr.${region}.amazonaws.com/${repoName}:${imageTag}"
-            - accountId: !Ref AWS::AccountId
-              region: !Ref AWS::Region
-              repoName: !Ref ECRRepoName
-              imageTag: !Ref ECRImageTag
+          Image: !Sub ${ECRRepoName}:${ECRImageTag}
+          LogConfiguration:
+            LogDriver: "awslogs"
+            Options:
+              awslogs-group:
+                Fn::ImportValue: !Join [":", [!Ref "StackName", "AVLogGroup"]]
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: !Ref ServiceName
+          RepositoryCredentials:
+            CredentialsParameter: !Ref "RegistryCredentials"
+          # MountPoints:
+          #   - ContainerPath: /usr/share/nginx/html/assets/json/
+          #     ReadOnly: true
+          #     SourceVolume: EfsVolume
           PortMappings:
             - ContainerPort: !Ref "ContainerPort"
+      # Volumes:
+      #   - EFSVolumeConfiguration:
+      #       # AuthorizationConfig:
+      #       #   AuthorizationConfig
+      #       FilesystemId: !Ref FileSystem
+      #       # TransitEncryption: String
+      #       # TransitEncryptionPort: Integer
+      #     Host:
+      #       SourcePath: String
+      #     Name: EfsVolume
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
@@ -120,6 +152,58 @@ Resources:
         - ContainerName: !Ref "ServiceName"
           ContainerPort: !Ref "ContainerPort"
           TargetGroupArn: !Ref "TargetGroup"
+
+  # #EFS
+  # FileSystem:
+  #   Type: AWS::EFS::FileSystem
+  #   Properties:
+  #     # BackupPolicy:
+  #     #   BackupPolicy
+  #     Encrypted: true
+  #     # FileSystemPolicy: Json
+  #     # FileSystemTags:
+  #     #   - ElasticFileSystemTag
+  #     # KmsKeyId: String
+  #     # LifecyclePolicies:
+  #     #   - LifecyclePolicy
+  #     # PerformanceMode: String
+  #     # ProvisionedThroughputInMibps: Double
+  #     # ThroughputMode: String
+
+  # MountTargetOne:
+  #   Type: AWS::EFS::MountTarget
+  #   Properties:
+  #     FileSystemId: !Ref FileSystem
+  #     SecurityGroups:
+  #       - !Ref EfsMountTargetSecurityGroup
+  #     SubnetId:
+  #       Fn::ImportValue:
+  #         !Join [":", [!Ref "StackName", "PrivateSubnetOne"]]
+
+  # MountTargetTwo:
+  #   Type: AWS::EFS::MountTarget
+  #   Properties:
+  #     FileSystemId: !Ref FileSystem
+  #     SecurityGroups:
+  #       - !Ref EfsMountTargetSecurityGroup
+  #     SubnetId:
+  #       Fn::ImportValue:
+  #         !Join [":", [!Ref "StackName", "PrivateSubnetTwo"]]
+
+  # EfsMountTargetSecurityGroup:
+  #   Type: AWS::EC2::SecurityGroup
+  #   Properties:
+  #     GroupDescription: Access to the EFS mount targets
+  #     SecurityGroupIngress:
+  #       - Description: Access from FargateContainerSecurityGroup
+  #         FromPort: 2049
+  #         IpProtocol: tcp
+  #         SourceSecurityGroupId:
+  #           Fn::ImportValue:
+  #             !Join [":", [!Ref "StackName", "FargateContainerSecurityGroup"]]
+  #         ToPort: 2049
+  #     VpcId:
+  #       Fn::ImportValue: !Join [":", [!Ref "StackName", "VPCId"]]
 
   # A target group. This is used for keeping track of all the tasks, and
   # what IP addresses / port numbers they have. You can query it yourself,
