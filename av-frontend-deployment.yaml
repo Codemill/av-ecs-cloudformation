@@ -87,7 +87,7 @@ Resources:
         - Name: !Ref "ServiceName"
           Cpu: !Ref "ContainerCpu"
           Command:
-            - !Sub "apk add aws-cli; aws s3 cp s3://${ConfigBucket}/settings.js /usr/share/nginx/html/assets/json/settings.js; nginx -g 'daemon off;'"
+            - !Sub "apk add aws-cli; aws s3 cp s3://${ConfigBucket}/settings.js /usr/share/nginx/html/assets/json/settings.js; aws s3 cp s3://${ConfigBucket}/keycloak.json /usr/share/nginx/html/assets/json/keycloak.json; nginx -g 'daemon off;'"
           EntryPoint:
             - "sh"
             - "-c"
