@@ -15,17 +15,13 @@ Parameters:
     Type: String
     Default: accurateVideo
     Description: A name for the database
-  ECRRepoName:
+  ImageRepoName:
     Type: String
-    Default: accurate-video-adapter
+    Default: codemill-docker.jfrog.io/accurate-player/accurate-player-adapter-postgres
     Description: The ecr repo and tag to use for image deployment
-  ECRImageTag:
-    Type: String
-    Default: 4.0.3-api
-    Description: The ecr tag to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.0.3-api
+    Default: 4.2.1
     Description: The ecr repo and tag to use for image deployment
   ContainerPort:
     Type: Number
@@ -55,15 +51,10 @@ Parameters:
     Type: Number
     Default: 2
     Description: How many copies of the service task to run
-  Role:
+  RegistryCredentials:
     Type: String
-    Default: ""
-    Description:
-      (Optional) An IAM role to give the service's containers if the code within needs to
-      access other AWS resources like S3 buckets, DynamoDB tables, etc
-
-Conditions:
-  HasCustomRole: !Not [!Equals [!Ref "Role", ""]]
+    Default: arn:aws:secretsmanager:eu-north-1:653767197116:secret:jfrog-docker-gitlabci-50X7p1
+    Description: Credentials to codemill.jfrog.io for pulling docker images
 
 # The task definition. This is a simple metadata description of what
 # container to run, and what resource requirements it has.
@@ -80,23 +71,13 @@ Resources:
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
-      ExecutionRoleArn:
-        Fn::ImportValue: !Join [":", [!Ref "StackName", "ECSTaskExecutionRole"]]
-      TaskRoleArn:
-        Fn::If:
-          - "HasCustomRole"
-          - !Ref "Role"
-          - !Ref "AWS::NoValue"
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskExecutionRole.Arn
       ContainerDefinitions:
         - Name: !Ref "ServiceName"
           Cpu: !Ref "ContainerCpu"
           Memory: !Ref "ContainerMemory"
-          Image: !Sub
-            - "${accountId}.dkr.ecr.${region}.amazonaws.com/${repoName}:${imageTag}"
-            - accountId: !Ref AWS::AccountId
-              region: !Ref AWS::Region
-              repoName: !Ref ECRRepoName
-              imageTag: !Ref ECRImageTag
+          Image: !Sub ${ImageRepoName}:${ImageTag}
           PortMappings:
             - ContainerPort: !Ref "ContainerPort"
             - ContainerPort: 5700
@@ -109,6 +90,8 @@ Resources:
                 Fn::ImportValue: !Join [":", [!Ref "StackName", "AVLogGroup"]]
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
+          RepositoryCredentials:
+            CredentialsParameter: !Ref "RegistryCredentials"
           Environment:
             - Name: ACL_ENABLED
               Value: "false"
@@ -121,9 +104,9 @@ Resources:
             - Name: AUTH_JWT_ENABLED
               Value: "true"
             - Name: AUTH_JWT_ISSUER
-              Value: "https://keycloak.codemill.cloud/auth/realms/av-dev"
+              Value: "https://keycloak.accurate.video/auth/realms/av-dev"
             - Name: AUTH_JWT_JWK_FILENAME
-              Value: "https://keycloak.codemill.cloud/auth/realms/av-dev/protocol/openid-connect/certs"
+              Value: "https://keycloak.accurate.video/auth/realms/av-dev/protocol/openid-connect/certs"
             - Name: AUTH_JWT_USERNAME
               Value: "preferred_username"
             - Name: DELETION_PHYSICAL_FILE_ENABLED
@@ -159,6 +142,56 @@ Resources:
               Value: "0.0.0.0"
             - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_HOST
               Value: !Join ["", [!Ref "ServiceName", ".av.local"]]
+            - Name: HTTP_PATH_PREFIX
+              Value: "/api"
+
+  # This is a role which is used by the ECS tasks themselves.
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ecs-tasks.amazonaws.com]
+            Action: ["sts:AssumeRole"]
+      Path: /
+      Policies:
+        - PolicyName: AmazonECSTaskExecutionRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  # Allow the ECS Tasks to use secrets from secretsmanager
+                  - "kms:Decrypt"
+                  - "secretsmanager:GetSecretValue"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  # Allow the ECS tasks to upload logs to CloudWatch
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - "rds-db:connect"
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - "s3:Describe*"
+                  - "s3:List*"
+                  - "s3:Read*"
+                  - "s3:HeadObject"
+                  - "s3:GetObject"
+                Resource:
+                  - Fn::Sub:
+                      - arn:aws:s3:::${ConfigBucketName}
+                      - ConfigBucketName:
+                          Fn::ImportValue: !Sub "${StackName}:ConfigBucketName"
+                  - Fn::Sub:
+                      - arn:aws:s3:::${ConfigBucketName}/*
+                      - ConfigBucketName:
+                          Fn::ImportValue: !Sub "${StackName}:ConfigBucketName"
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
@@ -228,6 +261,9 @@ Resources:
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 120
       HealthyThresholdCount: 2
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "15"
       Matcher:
         HttpCode: "200,401"
       TargetType: ip

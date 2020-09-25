@@ -18,6 +18,7 @@ Parameters:
   DBPassword:
     Type: String
     Default: postgres
+    NoEcho: true
     Description: db password
   DBClass:
     Type: String
@@ -260,21 +261,21 @@ Resources:
     Properties:
       Description: Ingress from the public ALB
       GroupId: !Ref "FargateContainerSecurityGroup"
-      IpProtocol: -1
+      IpProtocol: "-1"
       SourceSecurityGroupId: !Ref "PublicLoadBalancerSG"
   EcsSecurityGroupIngressFromPrivateALB:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
       Description: Ingress from the private ALB
       GroupId: !Ref "FargateContainerSecurityGroup"
-      IpProtocol: -1
+      IpProtocol: "-1"
       SourceSecurityGroupId: !Ref "PrivateLoadBalancerSG"
   EcsSecurityGroupIngressFromSelf:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
       Description: Ingress from other containers in the same security group
       GroupId: !Ref "FargateContainerSecurityGroup"
-      IpProtocol: -1
+      IpProtocol: "-1"
       SourceSecurityGroupId: !Ref "FargateContainerSecurityGroup"
 
   # Load balancers for getting traffic to containers.
@@ -298,7 +299,7 @@ Resources:
       SecurityGroupIngress:
         # Allow access to ALB from anywhere on the internet
         - CidrIp: 0.0.0.0/0
-          IpProtocol: -1
+          IpProtocol: "-1"
   PublicLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     DependsOn: GatewayAttachement
@@ -314,29 +315,15 @@ Resources:
         - !Ref PublicSubnetTwo
       SecurityGroups: [!Ref "PublicLoadBalancerSG"]
 
-  # A dummy target group is used to setup the ALB to just drop traffic
-  # initially, before any real service target groups have been added.
-  DummyTargetGroupPublic:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      HealthCheckIntervalSeconds: 6
-      HealthCheckPath: /
-      HealthCheckProtocol: HTTP
-      HealthCheckTimeoutSeconds: 5
-      HealthyThresholdCount: 2
-      Name: !Join ["-", [!Ref "AWS::StackName", "drop-1"]]
-      Port: 80
-      Protocol: HTTP
-      UnhealthyThresholdCount: 2
-      VpcId: !Ref "VPC"
   PublicLoadBalancerListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
-    DependsOn:
-      - PublicLoadBalancer
     Properties:
       DefaultActions:
-        - TargetGroupArn: !Ref "DummyTargetGroupPublic"
-          Type: "forward"
+        - FixedResponseConfig:
+            ContentType: text/plain
+            MessageBody: "Not implemented"
+            StatusCode: "200"
+          Type: "fixed-response"
       LoadBalancerArn: !Ref "PublicLoadBalancer"
       Port: 80
       Protocol: HTTP
@@ -354,7 +341,7 @@ Resources:
     Properties:
       Description: Only accept traffic from a container in the fargate container security group
       GroupId: !Ref "PrivateLoadBalancerSG"
-      IpProtocol: -1
+      IpProtocol: "-1"
       SourceSecurityGroupId: !Ref "FargateContainerSecurityGroup"
   PrivateLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
@@ -369,29 +356,16 @@ Resources:
         - !Ref PrivateSubnetOne
         - !Ref PrivateSubnetTwo
       SecurityGroups: [!Ref "PrivateLoadBalancerSG"]
-  # This dummy target group is used to setup the ALB to just drop traffic
-  # initially, before any real service target groups have been added.
-  DummyTargetGroupPrivate:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      HealthCheckIntervalSeconds: 6
-      HealthCheckPath: /
-      HealthCheckProtocol: HTTP
-      HealthCheckTimeoutSeconds: 5
-      HealthyThresholdCount: 2
-      Name: !Join ["-", [!Ref "AWS::StackName", "drop-2"]]
-      Port: 80
-      Protocol: HTTP
-      UnhealthyThresholdCount: 2
-      VpcId: !Ref "VPC"
+
   PrivateLoadBalancerListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
-    DependsOn:
-      - PrivateLoadBalancer
     Properties:
       DefaultActions:
-        - TargetGroupArn: !Ref "DummyTargetGroupPrivate"
-          Type: "forward"
+        - FixedResponseConfig:
+            ContentType: text/plain
+            MessageBody: "Not implemented"
+            StatusCode: "200"
+          Type: "fixed-response"
       LoadBalancerArn: !Ref "PrivateLoadBalancer"
       Port: 80
       Protocol: HTTP
@@ -459,61 +433,6 @@ Resources:
                   - "ec2:DescribeInstances"
                 Resource: "*"
 
-  # This is a role which is used by the ECS tasks themselves.
-  ECSTaskExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: [ecs-tasks.amazonaws.com]
-            Action: ["sts:AssumeRole"]
-      Path: /
-      Policies:
-        - PolicyName: AmazonECSTaskExecutionRolePolicy
-          PolicyDocument:
-            Statement:
-              - Effect: Allow
-                Action:
-                  # Allow the ECS Tasks to download images from ECR
-                  - "ecr:GetAuthorizationToken"
-                  - "ecr:BatchCheckLayerAvailability"
-                  - "ecr:GetDownloadUrlForLayer"
-                  - "ecr:BatchGetImage"
-                  # Allow the ECS Tasks to download images from ECR
-                  - "ecr:GetAuthorizationToken"
-                  - "ecr:BatchCheckLayerAvailability"
-                  - "ecr:GetDownloadUrlForLayer"
-                  - "ecr:BatchGetImage"
-
-                  # Allow the ECS Tasks to use secrets from secretsmanager
-                  - "kms:Decrypt"
-                  - "secretsmanager:GetSecretValue"
-
-                  # Allow the ECS tasks to upload logs to CloudWatch
-                  - "logs:CreateLogStream"
-                  - "logs:PutLogEvents"
-
-                  - "s3:Describe*"
-                  - "s3:List*"
-                  - "s3:Read*"
-                  - "s3:HeadObject"
-                  - "s3:GetObject"
-                Resource: "*"
-
-  # ECR repository for pushing frontend images
-  AVQCRepository:
-    Type: AWS::ECR::Repository
-    Properties:
-      RepositoryName: "accurate-video-qc"
-
-  # ECR repository for pushing adapter images
-  AVAdapterRepository:
-    Type: AWS::ECR::Repository
-    Properties:
-      RepositoryName: "accurate-video-adapter"
-
   #Log group for the ECS services
   AVLogGroup:
     Type: AWS::Logs::LogGroup
@@ -527,12 +446,39 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
-      # NotificationConfiguration:
-      #   NotificationConfiguration
+      NotificationConfiguration:
+        TopicConfigurations: 
+          - Event: s3:ObjectCreated:*
+            Filter: 
+                S3Key: 
+                  Rules: 
+                    - Name: prefix
+                      Value: settings.js #TODO: parameterise? use folders for each service? 
+            Topic: !Ref SettingsUpdatedTopic
       # Tags:
       #   - Tag
       VersioningConfiguration:
         Status: Enabled
+
+  SettingsUpdatedTopic:
+    Type: AWS::SNS::Topic
+
+  SettingsUpdatedTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties: 
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: 
+              Service: s3.amazonaws.com
+            Resource: !Ref SettingsUpdatedTopic
+            Action: sns:Publish
+            Condition:
+              StringEquals:
+                AWS:SourceAccount: !Ref AWS::AccountId
+      Topics: 
+        - !Ref SettingsUpdatedTopic
 
 # These are the values output by the CloudFormation template. Be careful
 # about changing any of them, because of them are exported with specific
@@ -543,6 +489,11 @@ Outputs:
     Value: !Ref "ConfigBucket"
     Export:
       Name: !Join [":", [!Ref "AWS::StackName", "ConfigBucketName"]]
+  SettingsUpdatedTopicArn:
+    Description: The name of the AV Config Bucket
+    Value: !Ref "SettingsUpdatedTopic"
+    Export:
+      Name: !Join [":", [!Ref "AWS::StackName", "SettingsUpdatedTopicArn"]]
   LogGroup:
     Description: The name of the AV Log Group
     Value: !Ref "AVLogGroup"
@@ -573,11 +524,6 @@ Outputs:
     Value: !GetAtt "ECSRole.Arn"
     Export:
       Name: !Join [":", [!Ref "AWS::StackName", "ECSRole"]]
-  ECSTaskExecutionRole:
-    Description: The ARN of the ECS role
-    Value: !GetAtt "ECSTaskExecutionRole.Arn"
-    Export:
-      Name: !Join [":", [!Ref "AWS::StackName", "ECSTaskExecutionRole"]]
   ECSTaskRole:
     Description: The ARN of the ECS role
     Value: !GetAtt "ECSTaskRole.Arn"

@@ -11,11 +11,11 @@ Parameters:
     Type: String
     Default: av-frontend
     Description: A name for the service
-  ECRRepoName:
+  ImageRepoName:
     Type: String
     Default: codemill-docker.jfrog.io/accurate-player/accurate-player-qc
-    Description: The ecr repo and tag to use for image deployment
-  ECRImageTag:
+    Description: The repo and tag to use for image deployment
+  ImageTag:
     Type: String
     Default: v4.2.2-rc.0
     Description: The ecr repo and tag to use for image deployment
@@ -47,19 +47,10 @@ Parameters:
     Type: Number
     Default: 2
     Description: How many copies of the service task to run
-  Role:
-    Type: String
-    Default: ""
-    Description:
-      (Optional) An IAM role to give the service's containers if the code within needs to
-      access other AWS resources like S3 buckets, DynamoDB tables, etc
   RegistryCredentials:
     Type: String
     Default: arn:aws:secretsmanager:eu-north-1:653767197116:secret:jfrog-docker-gitlabci-50X7p1
     Description: Credentials to codemill.jfrog.io for pulling docker images
-
-Conditions:
-  HasCustomRole: !Not [!Equals [!Ref "Role", ""]]
 
 # The task definition. This is a simple metadata description of what
 # container to run, and what resource requirements it has.
@@ -73,13 +64,8 @@ Resources:
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
-      ExecutionRoleArn:
-        Fn::ImportValue: !Join [":", [!Ref "StackName", "ECSTaskExecutionRole"]]
-      TaskRoleArn:
-        Fn::If:
-          - "HasCustomRole"
-          - !Ref "Role"
-          - !Ref "AWS::NoValue"
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskExecutionRole.Arn
       ContainerDefinitions:
         - Name: !Ref "ServiceName"
           Cpu: !Ref "ContainerCpu"
@@ -87,12 +73,13 @@ Resources:
             - !Sub
               - "apk add aws-cli; aws s3 cp s3://${ConfigBucketName}/settings.js /usr/share/nginx/html/assets/json/settings.js; aws s3 cp s3://${ConfigBucketName}/keycloak.json /usr/share/nginx/html/assets/json/keycloak.json; nginx -g 'daemon off;'"
               - ConfigBucketName:
-                  Fn::ImportValue: !Join [":", [!Ref "StackName", "ConfigBucketName"]]
+                  Fn::ImportValue:
+                    !Join [":", [!Ref "StackName", "ConfigBucketName"]]
           EntryPoint:
             - "sh"
             - "-c"
           Memory: !Ref "ContainerMemory"
-          Image: !Sub ${ECRRepoName}:${ECRImageTag}
+          Image: !Sub ${ImageRepoName}:${ImageTag}
           LogConfiguration:
             LogDriver: "awslogs"
             Options:
@@ -104,6 +91,50 @@ Resources:
             CredentialsParameter: !Ref "RegistryCredentials"
           PortMappings:
             - ContainerPort: !Ref "ContainerPort"
+
+  # This is a role which is used by the ECS tasks themselves.
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ecs-tasks.amazonaws.com]
+            Action: ["sts:AssumeRole"]
+      Path: /
+      Policies:
+        - PolicyName: AmazonECSTaskExecutionRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  # Allow the ECS Tasks to use secrets from secretsmanager
+                  - "kms:Decrypt"
+                  - "secretsmanager:GetSecretValue"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  # Allow the ECS tasks to upload logs to CloudWatch
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - "s3:Describe*"
+                  - "s3:List*"
+                  - "s3:Read*"
+                  - "s3:HeadObject"
+                  - "s3:GetObject"
+                Resource:
+                  - Fn::Sub:
+                      - arn:aws:s3:::${ConfigBucketName}
+                      - ConfigBucketName:
+                          Fn::ImportValue: !Sub "${StackName}:ConfigBucketName"
+                  - Fn::Sub:
+                      - arn:aws:s3:::${ConfigBucketName}/*
+                      - ConfigBucketName:
+                          Fn::ImportValue: !Sub "${StackName}:ConfigBucketName"
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
@@ -152,6 +183,9 @@ Resources:
       HealthCheckTimeoutSeconds: 50
       HealthyThresholdCount: 2
       TargetType: ip
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "15"
       Name: !Ref "ServiceName"
       Port: !Ref "ContainerPort"
       Protocol: HTTP
@@ -173,25 +207,6 @@ Resources:
         Fn::ImportValue: !Join [":", [!Ref "StackName", "PublicListener"]]
       Priority: !Ref "Priority"
 
-  ConfigBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-      NotificationConfiguration:
-        LambdaConfigurations: 
-          - Event: s3:ObjectCreated:*
-            Filter: 
-                S3Key: 
-                  Rules: 
-                    - Name: prefix
-                      Value: settings.js #TODO: parameterise?
-            Function: !GetAtt UpdateServiceLambdaFunction.Arn
-      VersioningConfiguration:
-        Status: Enabled
-
   UpdateServiceLambdaFunction:
     Type: "AWS::Lambda::Function"
     Properties:
@@ -210,53 +225,63 @@ Resources:
               else     console.log(data);           // successful response
             });
           };
-      Environment: 
-        Variables: 
+      Environment:
+        Variables:
           CLUSTER_NAME:
             Fn::ImportValue: !Join [":", [!Ref "StackName", "ClusterName"]]
           SERVICE_NAME: !Ref Service
       Handler: index.handler
-      Role : !GetAtt LambdaExecutionRole.Arn
+      Role: !GetAtt LambdaExecutionRole.Arn
       Runtime: nodejs12.x
       Timeout: 5
 
+  ConfigSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !GetAtt UpdateServiceLambdaFunction.Arn
+      # FilterPolicy: Json
+      Protocol: lambda
+      TopicArn:
+        Fn::ImportValue: !Sub "${StackName}:SettingsUpdatedTopicArn"
+
   LambdaPermission:
     Type: AWS::Lambda::Permission
-    Properties: 
+    Properties:
       Action: lambda:InvokeFunction
       FunctionName: !Ref UpdateServiceLambdaFunction
-      Principal: s3.amazonaws.com
-      SourceArn: !GetAtt ConfigBucket.Arn
+      Principal: sns.amazonaws.com
+      SourceArn:
+        Fn::ImportValue: !Sub "${StackName}:SettingsUpdatedTopicArn"
 
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
-        - Effect: Allow
-          Principal:
-            Service:
-            - lambda.amazonaws.com
-          Action:
-          - sts:AssumeRole
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
       Path: "/"
       Policies:
-      - PolicyName: root
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Effect: Allow
-            Action:
-              - logs:CreateLogGroup
-              - logs:CreateLogStream
-              - logs:PutLogEvents
-            Resource: arn:aws:logs:*:*:*
-          - Effect: Allow
-            Action:
-              - ecs:UpdateService
-            Resource: 
-              - Fn::Sub:
-                - arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${Service.Name}
-                - ClusterName:
-                    Fn::ImportValue: !Sub "${StackName}:ClusterName"
+        - PolicyName: root
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - ecs:UpdateService
+                Resource:
+                  - Fn::Sub:
+                      - arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${Service.Name}
+                      - ClusterName:
+                          Fn::ImportValue: !Sub "${StackName}:ClusterName"

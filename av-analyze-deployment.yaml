@@ -1,32 +1,25 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Description: Deploy a service on AWS Fargate, hosted in a private subnet, but accessible via a public load balancer.
 Parameters:
   StackName:
     Type: String
     Default: production
-    Description: The name of the parent Fargate networking stack that you created. Necessary
-                 to locate and reference resources created by that stack.
+    Description:
+      The name of the parent Fargate networking stack that you created. Necessary
+      to locate and reference resources created by that stack.
   ServiceName:
     Type: String
     Default: av-analyze
     Description: A name for the service
-  DBName:
+  ImageRepoName:
     Type: String
-    Default: accurateVideo
-    Description: A name for the database
-  RepoName:
-    Type: String
-    Default: codemill-docker.jfrog.io/accurate-player
-    Description: The ecr repo and tag to use for image deployment
-  RepoImage:
-    Type: String
-    Default: accurate-analyze
+    Default: codemill-docker.jfrog.io/accurate-player/accurate-analyze
     Description: The ecr repo and tag to use for image deployment
   ImageTag:
     Type: String
-    Default: 1.1.1-api
+    Default: 1.1.1
     Description: The ecr repo and tag to use for image deployment
-  RegistryCredentias:
+  RegistryCredentials:
     Type: String
     Default: arn:aws:secretsmanager:eu-north-1:653767197116:secret:jfrog-docker-gitlabci-50X7p1
     Description: Credentials to codemill.jfrog.io for pulling docker images
@@ -46,27 +39,18 @@ Parameters:
     Type: String
     Default: "/api/analyze/*"
     Description: A path on the public load balancer that this service
-                 should be connected to. Use * to send all load balancer
-                 traffic to this service.
+      should be connected to. Use * to send all load balancer
+      traffic to this service.
   Priority:
     Type: Number
     Default: 1
     Description: The priority for the routing rule added to the load balancer.
-                 This only applies if your have multiple services which have been
-                 assigned to different paths on the load balancer.
+      This only applies if your have multiple services which have been
+      assigned to different paths on the load balancer.
   DesiredCount:
     Type: Number
     Default: 2
     Description: How many copies of the service task to run
-  Role:
-    Type: String
-    Default: ""
-    Description: (Optional) An IAM role to give the service's containers if the code within needs to
-                 access other AWS resources like S3 buckets, DynamoDB tables, etc
-
-Conditions:
-  HasCustomRole: !Not [ !Equals [!Ref 'Role', ''] ]
-
 
 # The task definition. This is a simple metadata description of what
 # container to run, and what resource requirements it has.
@@ -77,43 +61,31 @@ Resources:
       ResourceSignal:
         Timeout: PT10M
     Properties:
-      Family: !Ref 'ServiceName'
-      Cpu: !Ref 'ContainerCpu'
-      Memory: !Ref 'ContainerMemory'
+      Family: !Ref "ServiceName"
+      Cpu: !Ref "ContainerCpu"
+      Memory: !Ref "ContainerMemory"
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
-      ExecutionRoleArn:
-        Fn::ImportValue:
-          !Join [':', [!Ref 'StackName', 'ECSTaskExecutionRole']]
-      TaskRoleArn:
-        Fn::If:
-          - 'HasCustomRole'
-          - !Ref 'Role'
-          - !Ref "AWS::NoValue"
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskExecutionRole.Arn
       ContainerDefinitions:
-        - Name: !Ref 'ServiceName'
-          Cpu: !Ref 'ContainerCpu'
-          Memory: !Ref 'ContainerMemory'
-          Image:
-            !Sub
-              - "${repoName}/${repoImage}:${imageTag}"
-              - repoName: !Ref RepoName
-                repoImage: !Ref RepoImage
-                imageTag: !Ref ImageTag
+        - Name: !Ref "ServiceName"
+          Cpu: !Ref "ContainerCpu"
+          Memory: !Ref "ContainerMemory"
+          Image: !Sub ${ImageRepoName}:${ImageTag}
           RepositoryCredentials:
-            CredentialsParameter: !Ref 'RegistryCredentias'
+            CredentialsParameter: !Ref "RegistryCredentials"
           PortMappings:
-            - ContainerPort: !Ref 'ContainerPort'
+            - ContainerPort: !Ref "ContainerPort"
             - ContainerPort: 5700
             - ContainerPort: 5701
             - ContainerPort: 5702
           LogConfiguration:
-            LogDriver: 'awslogs'
+            LogDriver: "awslogs"
             Options:
               awslogs-group:
-                Fn::ImportValue:
-                  !Join [':', [!Ref 'StackName', 'AVLogGroup']]
+                Fn::ImportValue: !Join [":", [!Ref "StackName", "AVLogGroup"]]
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
           Environment:
@@ -123,6 +95,50 @@ Resources:
               Value: "/tmp/wav"
             - Name: QUARKUS_HTTP_CORS
               Value: "true"
+
+  # This is a role which is used by the ECS tasks themselves.
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ecs-tasks.amazonaws.com]
+            Action: ["sts:AssumeRole"]
+      Path: /
+      Policies:
+        - PolicyName: AmazonECSTaskExecutionRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  # Allow the ECS Tasks to use secrets from secretsmanager
+                  - "kms:Decrypt"
+                  - "secretsmanager:GetSecretValue"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  # Allow the ECS tasks to upload logs to CloudWatch
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - "s3:Describe*"
+                  - "s3:List*"
+                  - "s3:Read*"
+                  - "s3:HeadObject"
+                  - "s3:GetObject"
+                Resource:
+                  - Fn::Sub:
+                      - arn:aws:s3:::${ConfigBucketName}
+                      - ConfigBucketName:
+                          Fn::ImportValue: !Sub "${StackName}:ConfigBucketName"
+                  - Fn::Sub:
+                      - arn:aws:s3:::${ConfigBucketName}/*
+                      - ConfigBucketName:
+                          Fn::ImportValue: !Sub "${StackName}:ConfigBucketName"
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
@@ -140,10 +156,9 @@ Resources:
             Type: SRV
       HealthCheckCustomConfig:
         FailureThreshold: 1
-      Name: !Ref 'ServiceName'
+      Name: !Ref "ServiceName"
       NamespaceId:
-        Fn::ImportValue:
-          !Join [':', [!Ref 'StackName', 'PrivateDNSNamespace']]
+        Fn::ImportValue: !Join [":", [!Ref "StackName", "PrivateDNSNamespace"]]
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
@@ -155,31 +170,30 @@ Resources:
       ResourceSignal:
         Timeout: PT10M
     Properties:
-      ServiceName: !Ref 'ServiceName'
+      ServiceName: !Ref "ServiceName"
       Cluster:
-        Fn::ImportValue:
-          !Join [':', [!Ref 'StackName', 'ClusterName']]
+        Fn::ImportValue: !Join [":", [!Ref "StackName", "ClusterName"]]
       LaunchType: FARGATE
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 75
-      DesiredCount: !Ref 'DesiredCount'
+      DesiredCount: !Ref "DesiredCount"
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
           SecurityGroups:
             - Fn::ImportValue:
-                !Join [':', [!Ref 'StackName', 'FargateContainerSecurityGroup']]
+                !Join [":", [!Ref "StackName", "FargateContainerSecurityGroup"]]
           Subnets:
             - Fn::ImportValue:
-                !Join [':', [!Ref 'StackName', 'PrivateSubnetOne']]
+                !Join [":", [!Ref "StackName", "PrivateSubnetOne"]]
             - Fn::ImportValue:
-                !Join [':', [!Ref 'StackName', 'PrivateSubnetTwo']]
-      TaskDefinition: !Ref 'TaskDefinition'
+                !Join [":", [!Ref "StackName", "PrivateSubnetTwo"]]
+      TaskDefinition: !Ref "TaskDefinition"
       LoadBalancers:
-        - ContainerName: !Ref 'ServiceName'
-          ContainerPort: !Ref 'ContainerPort'
-          TargetGroupArn: !Ref 'TargetGroup'
+        - ContainerName: !Ref "ServiceName"
+          ContainerPort: !Ref "ContainerPort"
+          TargetGroupArn: !Ref "TargetGroup"
       ServiceRegistries:
         - RegistryArn: !GetAtt DiscoveryService.Arn
           Port: 8080
@@ -198,27 +212,25 @@ Resources:
       HealthCheckTimeoutSeconds: 120
       HealthyThresholdCount: 2
       Matcher:
-        HttpCode: '200,401,400'
+        HttpCode: "200,401,400"
       TargetType: ip
-      Name: !Ref 'ServiceName'
-      Port: !Ref 'ContainerPort'
+      Name: !Ref "ServiceName"
+      Port: !Ref "ContainerPort"
       Protocol: HTTP
       UnhealthyThresholdCount: 2
       VpcId:
-        Fn::ImportValue:
-          !Join [':', [!Ref 'StackName', 'VPCId']]
+        Fn::ImportValue: !Join [":", [!Ref "StackName", "VPCId"]]
 
   # Create a rule on the load balancer for routing traffic to the target group
   LoadBalancerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
     Properties:
       Actions:
-        - TargetGroupArn: !Ref 'TargetGroup'
-          Type: 'forward'
+        - TargetGroupArn: !Ref "TargetGroup"
+          Type: "forward"
       Conditions:
         - Field: path-pattern
-          Values: [!Ref 'Path']
+          Values: [!Ref "Path"]
       ListenerArn:
-        Fn::ImportValue:
-          !Join [':', [!Ref 'StackName', 'PublicListener']]
-      Priority: !Ref 'Priority'
+        Fn::ImportValue: !Join [":", [!Ref "StackName", "PublicListener"]]
+      Priority: !Ref "Priority"
