@@ -7,6 +7,10 @@ Description: This stack deploys a Fargate cluster that is in a VPC with both
   the private subnet, which can be used for private internal traffic
   between internal services.
 Parameters:
+  ClusterName:
+    Type: String
+    Default: av-cluster
+    Description: name of the cluster
   DBName:
     Type: String
     Default: accurateVideo
@@ -15,11 +19,6 @@ Parameters:
     Type: String
     Default: postgres
     Description: db username
-  DBPassword:
-    Type: String
-    Default: postgres
-    NoEcho: true
-    Description: db password
   DBClass:
     Type: String
     Default: db.t3.small
@@ -28,6 +27,11 @@ Parameters:
     Type: String
     Default: "5"
     Description: Size of the db in GB
+  ApplicationTag:
+    Type: String
+    Default: "Accurate Video"
+    AllowedValues:
+      - "Accurate Video"
 
 Mappings:
   # Hard values for the subnet masks. These masks define
@@ -39,10 +43,6 @@ Mappings:
   # 10.0.1.0 - 10.0.1.255
   # 10.0.2.0 - 10.0.2.255
   # 10.0.3.0 - 10.0.3.255
-  #
-  # If you need more IP addresses (perhaps you have so many
-  # instances that you run out) then you can customize these
-  # ranges to add more
   SubnetConfig:
     VPC:
       CIDR: "10.0.0.0/16"
@@ -66,6 +66,9 @@ Resources:
       EnableDnsSupport: true
       EnableDnsHostnames: true
       CidrBlock: !FindInMap ["SubnetConfig", "VPC", "CIDR"]
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
   # Two public subnets, where containers can have public IP addresses
   PublicSubnetOne:
@@ -78,6 +81,9 @@ Resources:
       VpcId: !Ref "VPC"
       CidrBlock: !FindInMap ["SubnetConfig", "PublicOne", "CIDR"]
       MapPublicIpOnLaunch: true
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
   PublicSubnetTwo:
     Type: AWS::EC2::Subnet
     Properties:
@@ -88,6 +94,9 @@ Resources:
       VpcId: !Ref "VPC"
       CidrBlock: !FindInMap ["SubnetConfig", "PublicTwo", "CIDR"]
       MapPublicIpOnLaunch: true
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
   # Two private subnets where containers will only have private
   # IP addresses, and will only be reachable by other members of the
@@ -101,6 +110,9 @@ Resources:
           - Fn::GetAZs: { Ref: "AWS::Region" }
       VpcId: !Ref "VPC"
       CidrBlock: !FindInMap ["SubnetConfig", "PrivateOne", "CIDR"]
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
   PrivateSubnetTwo:
     Type: AWS::EC2::Subnet
     Properties:
@@ -110,13 +122,20 @@ Resources:
           - Fn::GetAZs: { Ref: "AWS::Region" }
       VpcId: !Ref "VPC"
       CidrBlock: !FindInMap ["SubnetConfig", "PrivateTwo", "CIDR"]
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
   # Setup networking resources for the public subnets. Containers
   # in the public subnets have public IP addresses and the routing table
   # sends network traffic via the internet gateway.
   InternetGateway:
     Type: AWS::EC2::InternetGateway
-  GatewayAttachement:
+    Properties:
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+  GatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
       VpcId: !Ref "VPC"
@@ -125,9 +144,12 @@ Resources:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref "VPC"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
   PublicRoute:
     Type: AWS::EC2::Route
-    DependsOn: GatewayAttachement
+    DependsOn: GatewayAttachment
     Properties:
       RouteTableId: !Ref "PublicRouteTable"
       DestinationCidrBlock: "0.0.0.0/0"
@@ -147,30 +169,45 @@ Resources:
   # in these subnets have only private IP addresses, and must use a NAT
   # gateway to talk to the internet. We launch two NAT gateways, one for
   # each private subnet.
-  NatGatewayOneAttachment:
+  ElasticIpOne:
     Type: AWS::EC2::EIP
-    DependsOn: GatewayAttachement
+    DependsOn: GatewayAttachment
     Properties:
       Domain: vpc
-  NatGatewayTwoAttachment:
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+  ElasticIpTwo:
     Type: AWS::EC2::EIP
-    DependsOn: GatewayAttachement
+    DependsOn: GatewayAttachment
     Properties:
       Domain: vpc
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
   NatGatewayOne:
     Type: AWS::EC2::NatGateway
     Properties:
-      AllocationId: !GetAtt NatGatewayOneAttachment.AllocationId
+      AllocationId: !GetAtt ElasticIpOne.AllocationId
       SubnetId: !Ref PublicSubnetOne
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
   NatGatewayTwo:
     Type: AWS::EC2::NatGateway
     Properties:
-      AllocationId: !GetAtt NatGatewayTwoAttachment.AllocationId
+      AllocationId: !GetAtt ElasticIpTwo.AllocationId
       SubnetId: !Ref PublicSubnetTwo
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
   PrivateRouteTableOne:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref "VPC"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
   PrivateRouteOne:
     Type: AWS::EC2::Route
     Properties:
@@ -186,6 +223,9 @@ Resources:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref "VPC"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
   PrivateRouteTwo:
     Type: AWS::EC2::Route
     Properties:
@@ -204,19 +244,9 @@ Resources:
     Properties:
       Name: av.local
       Vpc: !Ref "VPC"
-
-  #DB VPC security group
-  # DBEC2SecurityGroup:
-  #   Type: AWS::EC2::SecurityGroup
-  #   Properties:
-  #     GroupDescription: Open database for access
-  #     SecurityGroupIngress:
-  #     - IpProtocol: tcp
-  #       FromPort: '5432'
-  #       ToPort: '5432'
-  #       SourceSecurityGroupName:
-  #         Ref: WebServerSecurityGroup
-  #     VpcId: !Ref 'VPC'
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
   # RDS DB instance
   DBSubnetGroup:
@@ -226,68 +256,155 @@ Resources:
       SubnetIds:
         - !Ref PrivateSubnetOne
         - !Ref PrivateSubnetTwo
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  RDSInstanceSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: 'RDS instance secret'
+      GenerateSecretString:
+        SecretStringTemplate: !Sub '{"username": "${DBUser}"}'
+        GenerateStringKey: 'password'
+        PasswordLength: 16
+        ExcludeCharacters: '"@/\'
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
   DBInstance:
     Type: AWS::RDS::DBInstance
     Properties:
       DBName: !Ref "DBName"
       Engine: Postgres
-      MasterUsername: !Ref "DBUser"
-      MasterUserPassword: !Ref "DBPassword"
+      MasterUsername: !Sub '{{resolve:secretsmanager:${RDSInstanceSecret}::username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${RDSInstanceSecret}::password}}'
       DBInstanceClass: !Ref "DBClass"
       AllocatedStorage: !Ref "DBAllocatedStorage"
       VPCSecurityGroups:
-        - !GetAtt FargateContainerSecurityGroup.GroupId
+        - !GetAtt RdsDatabaseSG.GroupId
       DBSubnetGroupName: !Ref "DBSubnetGroup"
+      StorageEncrypted: true
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
     DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+
+  RdsDatabaseSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to RDS instance
+      VpcId: !Ref "VPC"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  RdsDatabaseSgIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: 
+      Description: Access from Adapter service
+      IpProtocol: "tcp"
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref AvAdapterSG
+      GroupId: !Ref RdsDatabaseSG
+
+  AvAdapterSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to Adapter service
+      VpcId: !Ref "VPC"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  AdapterSgIngressALB:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: 
+      Description: Access from the public ALB
+      IpProtocol: "tcp"
+      FromPort: 8080
+      ToPort: 8080
+      SourceSecurityGroupId: !Ref "PublicLoadBalancerSG" #TODO: Validate this
+      GroupId: !Ref AvAdapterSG
+
+  AdapterSgIngressJobs:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: 
+      Description: Access from the Jobs service
+      IpProtocol: "tcp"
+      FromPort: 8080
+      ToPort: 8080
+      SourceSecurityGroupId: !Ref "AvJobsSG" #TODO: Validate this
+      GroupId: !Ref AvAdapterSG
+
+  AvFrontendSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to Frontend service
+      VpcId: !Ref "VPC"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  AvFrontendSgIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: 
+      Description: Access from the public ALB
+      IpProtocol: "tcp"
+      FromPort: 80
+      ToPort: 80
+      SourceSecurityGroupId: !Ref "PublicLoadBalancerSG" #TODO: Validate this
+      GroupId: !Ref AvFrontendSG
+  
+  AvAnalyzeSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to Analyze service
+      VpcId: !Ref "VPC"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  AvAnalyzeSgIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: 
+      Description: Access from the public ALB
+      IpProtocol: "tcp"
+      FromPort: 8080
+      ToPort: 8080
+      SourceSecurityGroupId: !Ref "PublicLoadBalancerSG" #TODO: Validate this
+      GroupId: !Ref AvAnalyzeSG
+
+  AvJobsSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Database access from adapter/backend
+      VpcId: !Ref "VPC"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  AvJobsSgIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: 
+      Description: Access from the public ALB
+      IpProtocol: "tcp"
+      FromPort: 8080
+      ToPort: 8080
+      SourceSecurityGroupId: !Ref "PublicLoadBalancerSG" #TODO: Validate this
+      GroupId: !Ref AvJobsSG
 
   # ECS Resources
   ECSCluster:
     Type: AWS::ECS::Cluster
-
-  # A security group for the containers we will run in Fargate.
-  # Three rules, allowing network traffic from a public facing load
-  # balancer, a private internal load balancer, and from other members
-  # of the security group.
-  #
-  # Remove any of the following ingress rules that are not needed.
-  FargateContainerSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Access to the Fargate containers
-      VpcId: !Ref "VPC"
-  EcsSecurityGroupIngressFromPublicALB:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      Description: Ingress from the public ALB
-      GroupId: !Ref "FargateContainerSecurityGroup"
-      IpProtocol: "-1"
-      SourceSecurityGroupId: !Ref "PublicLoadBalancerSG"
-  EcsSecurityGroupIngressFromPrivateALB:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      Description: Ingress from the private ALB
-      GroupId: !Ref "FargateContainerSecurityGroup"
-      IpProtocol: "-1"
-      SourceSecurityGroupId: !Ref "PrivateLoadBalancerSG"
-  EcsSecurityGroupIngressFromSelf:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      Description: Ingress from other containers in the same security group
-      GroupId: !Ref "FargateContainerSecurityGroup"
-      IpProtocol: "-1"
-      SourceSecurityGroupId: !Ref "FargateContainerSecurityGroup"
-
-  # Load balancers for getting traffic to containers.
-  # This sample template creates two load balancers:
-  #
-  # - One public load balancer, hosted in public subnets that is accessible
-  #   to the public, and is intended to route traffic to one or more public
-  #   facing services.
-  # - One private load balancer, hosted in private subnets, that only
-  #   accepts traffic from other containers in the Fargate cluster, and is
-  #   intended for private services that should not be accessed directly
-  #   by the public.
+      ClusterName: !Ref ClusterName
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
   # A public facing load balancer, this is used for accepting traffic from the public
   # internet and directing it to public facing microservices
@@ -299,10 +416,20 @@ Resources:
       SecurityGroupIngress:
         # Allow access to ALB from anywhere on the internet
         - CidrIp: 0.0.0.0/0
-          IpProtocol: "-1"
+          IpProtocol: "tcp"
+          FromPort: 80
+          ToPort: 80
+        # - CidrIp: 0.0.0.0/0
+        #   IpProtocol: "tcp"
+        #   FromPort: 443
+        #   ToPort: 443
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
   PublicLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    DependsOn: GatewayAttachement
+    DependsOn: GatewayAttachment
     Properties:
       Scheme: internet-facing
       LoadBalancerAttributes:
@@ -314,6 +441,9 @@ Resources:
         - !Ref PublicSubnetOne
         - !Ref PublicSubnetTwo
       SecurityGroups: [!Ref "PublicLoadBalancerSG"]
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag 
 
   PublicLoadBalancerListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -328,116 +458,12 @@ Resources:
       Port: 80
       Protocol: HTTP
 
-  # An internal load balancer, this would be used for a service that is not
-  # directly accessible to the public, but instead should only receive traffic
-  # from your other services.
-  PrivateLoadBalancerSG:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Access to the internal load balancer
-      VpcId: !Ref "VPC"
-  PrivateLoadBalancerIngressFromECS:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      Description: Only accept traffic from a container in the fargate container security group
-      GroupId: !Ref "PrivateLoadBalancerSG"
-      IpProtocol: "-1"
-      SourceSecurityGroupId: !Ref "FargateContainerSecurityGroup"
-  PrivateLoadBalancer:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    Properties:
-      Scheme: internal
-      LoadBalancerAttributes:
-        - Key: idle_timeout.timeout_seconds
-          Value: "30"
-      Subnets:
-        # This load balancer is put into the private subnet, so that there is no
-        # route for the public to even be able to access the private load balancer.
-        - !Ref PrivateSubnetOne
-        - !Ref PrivateSubnetTwo
-      SecurityGroups: [!Ref "PrivateLoadBalancerSG"]
-
-  PrivateLoadBalancerListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      DefaultActions:
-        - FixedResponseConfig:
-            ContentType: text/plain
-            MessageBody: "Not implemented"
-            StatusCode: "200"
-          Type: "fixed-response"
-      LoadBalancerArn: !Ref "PrivateLoadBalancer"
-      Port: 80
-      Protocol: HTTP
-
-  # This is an IAM role which authorizes ECS to manage resources on your
-  # account on your behalf, such as updating your load balancer with the
-  # details of where your containers are, so that traffic can reach your
-  # containers.
-  ECSRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: [ecs.amazonaws.com]
-            Action: ["sts:AssumeRole"]
-      Path: /
-      Policies:
-        - PolicyName: ecs-service
-          PolicyDocument:
-            Statement:
-              - Effect: Allow
-                Action:
-                  # Rules which allow ECS to attach network interfaces to instances
-                  # on your behalf in order for awsvpc networking mode to work right
-                  - "ec2:AttachNetworkInterface"
-                  - "ec2:CreateNetworkInterface"
-                  - "ec2:CreateNetworkInterfacePermission"
-                  - "ec2:DeleteNetworkInterface"
-                  - "ec2:DeleteNetworkInterfacePermission"
-                  - "ec2:Describe*"
-                  - "ec2:DetachNetworkInterface"
-
-                  # Rules which allow ECS to update load balancers on your behalf
-                  # with the information sabout how to send traffic to your containers
-                  - "elasticloadbalancing:DeregisterInstancesFromLoadBalancer"
-                  - "elasticloadbalancing:DeregisterTargets"
-                  - "elasticloadbalancing:Describe*"
-                  - "elasticloadbalancing:RegisterInstancesWithLoadBalancer"
-                  - "elasticloadbalancing:RegisterTargets"
-                Resource: "*"
-
-  # This is a role which is used by the ECS tasks themselves.
-  ECSTaskRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: [ecs-tasks.amazonaws.com]
-            Action: ["sts:AssumeRole"]
-      Path: /
-      Policies:
-        - PolicyName: ecs-task-role
-          PolicyDocument:
-            Statement:
-              - Effect: Allow
-                Action:
-                  # Allow the ECS Tasks to discover other ecs tasks
-                  - "ecs:ListTasks"
-                  - "ecs:DescribeTasks"
-                  - "ec2:DescribeNetworkInterfaces"
-                  - "ec2:DescribeInstances"
-                Resource: "*"
-
   #Log group for the ECS services
   AVLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: "AVLogGroup"
+      RetentionInDays: 14
 
   ConfigBucket:
     Type: AWS::S3::Bucket
@@ -455,13 +481,18 @@ Resources:
                     - Name: prefix
                       Value: settings.js #TODO: parameterise? use folders for each service? 
             Topic: !Ref SettingsUpdatedTopic
-      # Tags:
-      #   - Tag
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
       VersioningConfiguration:
         Status: Enabled
 
   SettingsUpdatedTopic:
     Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
   SettingsUpdatedTopicPolicy:
     Type: AWS::SNS::TopicPolicy
@@ -504,11 +535,6 @@ Outputs:
     Value: !Ref "ECSCluster"
     Export:
       Name: !Join [":", [!Ref "AWS::StackName", "ClusterName"]]
-  InternalUrl:
-    Description: The url of the internal load balancer
-    Value: !Join ["", ["http://", !GetAtt "PrivateLoadBalancer.DNSName"]]
-    Export:
-      Name: !Join [":", [!Ref "AWS::StackName", "InternalUrl"]]
   DBEndpoint:
     Description: The endpoint of the database
     Value: !GetAtt "DBInstance.Endpoint.Address"
@@ -519,26 +545,11 @@ Outputs:
     Value: !Join ["", ["http://", !GetAtt "PublicLoadBalancer.DNSName"]]
     Export:
       Name: !Join [":", [!Ref "AWS::StackName", "ExternalUrl"]]
-  ECSRole:
-    Description: The ARN of the ECS role
-    Value: !GetAtt "ECSRole.Arn"
-    Export:
-      Name: !Join [":", [!Ref "AWS::StackName", "ECSRole"]]
-  ECSTaskRole:
-    Description: The ARN of the ECS role
-    Value: !GetAtt "ECSTaskRole.Arn"
-    Export:
-      Name: !Join [":", [!Ref "AWS::StackName", "ECSTaskRole"]]
   PublicListener:
     Description: The ARN of the public load balancer's Listener
     Value: !Ref PublicLoadBalancerListener
     Export:
       Name: !Join [":", [!Ref "AWS::StackName", "PublicListener"]]
-  PrivateListener:
-    Description: The ARN of the private load balancer's Listener
-    Value: !Ref PrivateLoadBalancerListener
-    Export:
-      Name: !Join [":", [!Ref "AWS::StackName", "PrivateListener"]]
   VPCId:
     Description: The ID of the VPC that this stack is deployed in
     Value: !Ref "VPC"
@@ -569,9 +580,39 @@ Outputs:
     Value: !Ref "PrivateDNSNamespace"
     Export:
       Name: !Join [":", [!Ref "AWS::StackName", "PrivateDNSNamespace"]]
-  FargateContainerSecurityGroup:
-    Description: A security group used to allow Fargate containers to receive traffic
-    Value: !Ref "FargateContainerSecurityGroup"
+  RdsDatabaseSG:
+    Description: Security group for the RDS instance
+    Value: !Ref RdsDatabaseSG
     Export:
       Name:
-        !Join [":", [!Ref "AWS::StackName", "FargateContainerSecurityGroup"]]
+        !Join [":", [!Ref "AWS::StackName", "RdsDatabaseSG"]]
+  AvAdapterSG:
+    Description: Security group for the Adapter service
+    Value: !Ref AvAdapterSG
+    Export:
+      Name:
+        !Join [":", [!Ref "AWS::StackName", "AvAdapterSG"]]
+  AvFrontendSG:
+    Description: Security group for the Frontend service
+    Value: !Ref AvFrontendSG
+    Export:
+      Name:
+        !Join [":", [!Ref "AWS::StackName", "AvFrontendSG"]]
+  AvAnalyzeSG:
+    Description: Security group for the Analyze service
+    Value: !Ref AvAnalyzeSG
+    Export:
+      Name:
+        !Join [":", [!Ref "AWS::StackName", "AvAnalyzeSG"]]
+  AvJobsSG:
+    Description: Security group for the Jobs service
+    Value: !Ref AvJobsSG
+    Export:
+      Name:
+        !Join [":", [!Ref "AWS::StackName", "AvJobsSG"]]
+  RDSInstanceSecretArn:
+    Description: Secrets Manager Secret ARN for RDS instance
+    Value: !Ref "RDSInstanceSecret"
+    Export:
+      Name:
+        !Join [":", [!Ref "AWS::StackName", "RDSInstanceSecretArn"]]

@@ -1,9 +1,9 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Deploy a service on AWS Fargate, hosted in a private subnet, but accessible via a public load balancer.
 Parameters:
-  StackName:
+  InfrastructureStackName:
     Type: String
-    Default: production
+    Default: av-ecs
     Description:
       The name of the parent Fargate networking stack that you created. Necessary
       to locate and reference resources created by that stack.
@@ -51,7 +51,11 @@ Parameters:
     Type: String
     Default: arn:aws:secretsmanager:eu-north-1:653767197116:secret:jfrog-docker-gitlabci-50X7p1
     Description: Credentials to codemill.jfrog.io for pulling docker images
-
+  ApplicationTag:
+    Type: String
+    Default: "Accurate Video"
+    AllowedValues:
+      - "Accurate Video"
 # The task definition. This is a simple metadata description of what
 # container to run, and what resource requirements it has.
 Resources:
@@ -71,10 +75,15 @@ Resources:
           Cpu: !Ref "ContainerCpu"
           Command:
             - !Sub
-              - "apk add aws-cli; aws s3 cp s3://${ConfigBucketName}/settings.js /usr/share/nginx/html/assets/json/settings.js; aws s3 cp s3://${ConfigBucketName}/keycloak.json /usr/share/nginx/html/assets/json/keycloak.json; nginx -g 'daemon off;'"
+              - |
+                apk add aws-cli; \
+                aws s3 cp s3://${ConfigBucketName}/settings.js /usr/share/nginx/html/assets/json/settings.js; \
+                aws s3 cp s3://${ConfigBucketName}/keycloak.json /usr/share/nginx/html/assets/json/keycloak.json; \
+                nginx -g 'daemon off;';
               - ConfigBucketName:
                   Fn::ImportValue:
-                    !Join [":", [!Ref "StackName", "ConfigBucketName"]]
+                    !Join [":", [!Ref "InfrastructureStackName", "ConfigBucketName"]]
+
           EntryPoint:
             - "sh"
             - "-c"
@@ -84,13 +93,16 @@ Resources:
             LogDriver: "awslogs"
             Options:
               awslogs-group:
-                Fn::ImportValue: !Join [":", [!Ref "StackName", "AVLogGroup"]]
+                Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "AVLogGroup"]]
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
           RepositoryCredentials:
             CredentialsParameter: !Ref "RegistryCredentials"
           PortMappings:
             - ContainerPort: !Ref "ContainerPort"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
   # This is a role which is used by the ECS tasks themselves.
   ECSTaskExecutionRole:
@@ -130,11 +142,14 @@ Resources:
                   - Fn::Sub:
                       - arn:aws:s3:::${ConfigBucketName}
                       - ConfigBucketName:
-                          Fn::ImportValue: !Sub "${StackName}:ConfigBucketName"
+                          Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
                   - Fn::Sub:
                       - arn:aws:s3:::${ConfigBucketName}/*
                       - ConfigBucketName:
-                          Fn::ImportValue: !Sub "${StackName}:ConfigBucketName"
+                          Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
@@ -144,30 +159,33 @@ Resources:
     DependsOn: LoadBalancerRule
     Properties:
       Cluster:
-        Fn::ImportValue: !Join [":", [!Ref "StackName", "ClusterName"]]
-      LaunchType: FARGATE
+        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 75
       DeploymentController:
         Type: ECS
       DesiredCount: !Ref "DesiredCount"
-      NetworkConfiguration:
-        AwsvpcConfiguration:
-          AssignPublicIp: ENABLED
-          SecurityGroups:
-            - Fn::ImportValue:
-                !Join [":", [!Ref "StackName", "FargateContainerSecurityGroup"]]
-          Subnets:
-            - Fn::ImportValue:
-                !Join [":", [!Ref "StackName", "PrivateSubnetOne"]]
-            - Fn::ImportValue:
-                !Join [":", [!Ref "StackName", "PrivateSubnetTwo"]]
-      TaskDefinition: !Ref "TaskDefinition"
+      LaunchType: FARGATE
       LoadBalancers:
         - ContainerName: !Ref "ServiceName"
           ContainerPort: !Ref "ContainerPort"
           TargetGroupArn: !Ref "TargetGroup"
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "AvFrontendSG"]]
+          Subnets:
+            - Fn::ImportValue:
+                !Join [":", [!Ref "InfrastructureStackName", "PrivateSubnetOne"]]
+            - Fn::ImportValue:
+                !Join [":", [!Ref "InfrastructureStackName", "PrivateSubnetTwo"]]
+      # PropagateTags: TASK_DEFINITION #Needs opting in
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+      TaskDefinition: !Ref "TaskDefinition"
 
   # A target group. This is used for keeping track of all the tasks, and
   # what IP addresses / port numbers they have. You can query it yourself,
@@ -191,7 +209,10 @@ Resources:
       Protocol: HTTP
       UnhealthyThresholdCount: 2
       VpcId:
-        Fn::ImportValue: !Join [":", [!Ref "StackName", "VPCId"]]
+        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "VPCId"]]
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
   # Create a rule on the load balancer for routing traffic to the target group
   LoadBalancerRule:
@@ -204,7 +225,7 @@ Resources:
         - Field: path-pattern
           Values: [!Ref "Path"]
       ListenerArn:
-        Fn::ImportValue: !Join [":", [!Ref "StackName", "PublicListener"]]
+        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "PublicListener"]]
       Priority: !Ref "Priority"
 
   UpdateServiceLambdaFunction:
@@ -228,12 +249,15 @@ Resources:
       Environment:
         Variables:
           CLUSTER_NAME:
-            Fn::ImportValue: !Join [":", [!Ref "StackName", "ClusterName"]]
+            Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
           SERVICE_NAME: !Ref Service
       Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
       Runtime: nodejs12.x
       Timeout: 5
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
   ConfigSubscription:
     Type: AWS::SNS::Subscription
@@ -242,7 +266,7 @@ Resources:
       # FilterPolicy: Json
       Protocol: lambda
       TopicArn:
-        Fn::ImportValue: !Sub "${StackName}:SettingsUpdatedTopicArn"
+        Fn::ImportValue: !Sub "${InfrastructureStackName}:SettingsUpdatedTopicArn"
 
   LambdaPermission:
     Type: AWS::Lambda::Permission
@@ -251,7 +275,7 @@ Resources:
       FunctionName: !Ref UpdateServiceLambdaFunction
       Principal: sns.amazonaws.com
       SourceArn:
-        Fn::ImportValue: !Sub "${StackName}:SettingsUpdatedTopicArn"
+        Fn::ImportValue: !Sub "${InfrastructureStackName}:SettingsUpdatedTopicArn"
 
   LambdaExecutionRole:
     Type: AWS::IAM::Role
@@ -284,4 +308,7 @@ Resources:
                   - Fn::Sub:
                       - arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${Service.Name}
                       - ClusterName:
-                          Fn::ImportValue: !Sub "${StackName}:ClusterName"
+                          Fn::ImportValue: !Sub "${InfrastructureStackName}:ClusterName"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag

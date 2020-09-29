@@ -1,9 +1,9 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Deploy a service on AWS Fargate, hosted in a private subnet, but accessible via a public load balancer.
 Parameters:
-  StackName:
+  InfrastructureStackName:
     Type: String
-    Default: production
+    Default: av-ecs
     Description:
       The name of the parent Fargate networking stack that you created. Necessary
       to locate and reference resources created by that stack.
@@ -33,7 +33,7 @@ Parameters:
     Description: How much CPU to give the container. 1024 is 1 CPU
   ContainerMemory:
     Type: Number
-    Default: 512
+    Default: 1024
     Description: How much memory in megabytes to give the container
   Path:
     Type: String
@@ -55,10 +55,27 @@ Parameters:
     Type: String
     Default: arn:aws:secretsmanager:eu-north-1:653767197116:secret:jfrog-docker-gitlabci-50X7p1
     Description: Credentials to codemill.jfrog.io for pulling docker images
+  ApplicationTag:
+    Type: String
+    Default: "Accurate Video"
+    AllowedValues:
+      - "Accurate Video"
 
-# The task definition. This is a simple metadata description of what
-# container to run, and what resource requirements it has.
 Resources:
+
+  AuthRunnerSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: 'Auth Runner secret'
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "runner"}'
+        GenerateStringKey: 'password'
+        PasswordLength: 16
+        ExcludeCharacters: '"@/\'
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     CreationPolicy:
@@ -87,7 +104,7 @@ Resources:
             LogDriver: "awslogs"
             Options:
               awslogs-group:
-                Fn::ImportValue: !Join [":", [!Ref "StackName", "AVLogGroup"]]
+                Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "AVLogGroup"]]
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
           RepositoryCredentials:
@@ -104,25 +121,21 @@ Resources:
             - Name: AUTH_JWT_ENABLED
               Value: "true"
             - Name: AUTH_JWT_ISSUER
-              Value: "https://keycloak.accurate.video/auth/realms/av-dev"
+              Value: "https://keycloak.codemill.cloud/auth/realms/av-dev"
             - Name: AUTH_JWT_JWK_FILENAME
-              Value: "https://keycloak.accurate.video/auth/realms/av-dev/protocol/openid-connect/certs"
+              Value: "https://keycloak.codemill.cloud/auth/realms/av-dev/protocol/openid-connect/certs"
             - Name: AUTH_JWT_USERNAME
               Value: "preferred_username"
             - Name: DELETION_PHYSICAL_FILE_ENABLED
               Value: "false"
             - Name: QUARKUS_DATASOURCE_DRIVER
               Value: "org.postgresql.Driver"
-            - Name: QUARKUS_DATASOURCE_PASSWORD
-              Value: "postgres"
-            - Name: QUARKUS_DATASOURCE_USERNAME
-              Value: "postgres"
             - Name: QUARKUS_DATASOURCE_URL
               Value: !Sub
                 - "jdbc:postgresql://${DBUrl}/${dbName}"
                 - DBUrl:
                     Fn::ImportValue:
-                      !Join [":", [!Ref "StackName", "DBEndpoint"]]
+                      !Join [":", [!Ref "InfrastructureStackName", "DBEndpoint"]]
                   dbName: !Ref "DBName"
             - Name: QUARKUS_FLYWAY_BASELINE-ON-MIGRATE
               Value: "false"
@@ -144,6 +157,26 @@ Resources:
               Value: !Join ["", [!Ref "ServiceName", ".av.local"]]
             - Name: HTTP_PATH_PREFIX
               Value: "/api"
+          Secrets:
+            - Name: QUARKUS_DATASOURCE_USERNAME
+              ValueFrom:
+                  Fn::Sub:
+                    - "${RDSInstanceSecretArn}:username::"
+                    - RDSInstanceSecretArn:
+                        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "RDSInstanceSecretArn"]]
+            - Name: QUARKUS_DATASOURCE_PASSWORD
+              ValueFrom:
+                  Fn::Sub:
+                    - "${RDSInstanceSecretArn}:password::"
+                    - RDSInstanceSecretArn:
+                        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "RDSInstanceSecretArn"]]
+            - Name: AUTH_RUNNER_USERNAME
+              ValueFrom: !Sub "${AuthRunnerSecret}:username::"
+            - Name: AUTH_RUNNER_PASSWORD
+              ValueFrom: !Sub "${AuthRunnerSecret}:password::"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
   # This is a role which is used by the ECS tasks themselves.
   ECSTaskExecutionRole:
@@ -175,7 +208,11 @@ Resources:
               - Effect: Allow
                 Action:
                   - "rds-db:connect"
-                Resource: '*'
+                Resource: "*"
+              - Effect: Allow #TODO: Tighten this up
+                Action:
+                  - "s3:*"
+                Resource: "*"
               - Effect: Allow
                 Action:
                   - "s3:Describe*"
@@ -187,15 +224,15 @@ Resources:
                   - Fn::Sub:
                       - arn:aws:s3:::${ConfigBucketName}
                       - ConfigBucketName:
-                          Fn::ImportValue: !Sub "${StackName}:ConfigBucketName"
+                          Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
                   - Fn::Sub:
                       - arn:aws:s3:::${ConfigBucketName}/*
                       - ConfigBucketName:
-                          Fn::ImportValue: !Sub "${StackName}:ConfigBucketName"
+                          Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
-  # The service. The service is a resource which allows you to run multiple
-  # copies of a type of task, and gather up their logs and metrics, as well
-  # as monitor the number of running tasks and replace any that have crashed
   DiscoveryService:
     Type: AWS::ServiceDiscovery::Service
     Properties:
@@ -211,7 +248,10 @@ Resources:
         FailureThreshold: 1
       Name: !Ref "ServiceName"
       NamespaceId:
-        Fn::ImportValue: !Join [":", [!Ref "StackName", "PrivateDNSNamespace"]]
+        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "PrivateDNSNamespace"]]
+      # Tags:
+      #   - Key: application
+      #     Value: !Ref ApplicationTag
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
@@ -220,9 +260,8 @@ Resources:
     Type: AWS::ECS::Service
     DependsOn: LoadBalancerRule
     Properties:
-      ServiceName: !Ref "ServiceName"
       Cluster:
-        Fn::ImportValue: !Join [":", [!Ref "StackName", "ClusterName"]]
+        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
       LaunchType: FARGATE
       DeploymentConfiguration:
         MaximumPercent: 200
@@ -233,12 +272,12 @@ Resources:
           AssignPublicIp: ENABLED
           SecurityGroups:
             - Fn::ImportValue:
-                !Join [":", [!Ref "StackName", "FargateContainerSecurityGroup"]]
+                !Join [":", [!Ref "InfrastructureStackName", "AvAdapterSG"]]
           Subnets:
             - Fn::ImportValue:
-                !Join [":", [!Ref "StackName", "PrivateSubnetOne"]]
+                !Join [":", [!Ref "InfrastructureStackName", "PrivateSubnetOne"]]
             - Fn::ImportValue:
-                !Join [":", [!Ref "StackName", "PrivateSubnetTwo"]]
+                !Join [":", [!Ref "InfrastructureStackName", "PrivateSubnetTwo"]]
       TaskDefinition: !Ref "TaskDefinition"
       LoadBalancers:
         - ContainerName: !Ref "ServiceName"
@@ -247,6 +286,10 @@ Resources:
       ServiceRegistries:
         - RegistryArn: !GetAtt DiscoveryService.Arn
           Port: 8080
+      # PropagateTags: TASK_DEFINITION #Needs opting in
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
   # A target group. This is used for keeping track of all the tasks, and
   # what IP addresses / port numbers they have. You can query it yourself,
@@ -272,8 +315,10 @@ Resources:
       Protocol: HTTP
       UnhealthyThresholdCount: 2
       VpcId:
-        Fn::ImportValue: !Join [":", [!Ref "StackName", "VPCId"]]
-
+        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "VPCId"]]
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
   # Create a rule on the load balancer for routing traffic to the target group
   LoadBalancerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
@@ -285,5 +330,20 @@ Resources:
         - Field: path-pattern
           Values: [!Ref "Path"]
       ListenerArn:
-        Fn::ImportValue: !Join [":", [!Ref "StackName", "PublicListener"]]
+        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "PublicListener"]]
       Priority: !Ref "Priority"
+
+Outputs:
+  AuthRunnerSecretArn:
+    Description: Secrets Manager Secret ARN for Auth Runner
+    Value: !Ref "AuthRunnerSecret"
+    Export:
+      Name:
+        !Join [":", [!Ref "AWS::StackName", "AuthRunnerSecretArn"]]
+
+  ServiceName:
+    Description: Service name
+    Value: !GetAtt "DiscoveryService.Name"
+    Export:
+      Name:
+        !Join [":", [!Ref "AWS::StackName", "DiscoveryServiceName"]]

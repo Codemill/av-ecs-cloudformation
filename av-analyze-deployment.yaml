@@ -1,9 +1,9 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Deploy a service on AWS Fargate, hosted in a private subnet, but accessible via a public load balancer.
 Parameters:
-  StackName:
+  InfrastructureStackName:
     Type: String
-    Default: production
+    Default: av-ecs
     Description:
       The name of the parent Fargate networking stack that you created. Necessary
       to locate and reference resources created by that stack.
@@ -51,9 +51,12 @@ Parameters:
     Type: Number
     Default: 2
     Description: How many copies of the service task to run
+  ApplicationTag:
+    Type: String
+    Default: "Accurate Video"
+    AllowedValues:
+      - "Accurate Video"
 
-# The task definition. This is a simple metadata description of what
-# container to run, and what resource requirements it has.
 Resources:
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
@@ -81,13 +84,19 @@ Resources:
             - ContainerPort: 5700
             - ContainerPort: 5701
             - ContainerPort: 5702
+          Command:
+            - "mkdir /tmp/wav && java -jar accurate-analyze.jar"
+          EntryPoint:
+            - "sh"
+            - "-c"
           LogConfiguration:
             LogDriver: "awslogs"
             Options:
               awslogs-group:
-                Fn::ImportValue: !Join [":", [!Ref "StackName", "AVLogGroup"]]
+                Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "AVLogGroup"]]
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
+          WorkingDirectory: "/opt/"
           Environment:
             - Name: AP_ANALYZE_CACHE_DAYS
               Value: "5"
@@ -95,6 +104,9 @@ Resources:
               Value: "/tmp/wav"
             - Name: QUARKUS_HTTP_CORS
               Value: "true"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
   # This is a role which is used by the ECS tasks themselves.
   ECSTaskExecutionRole:
@@ -134,11 +146,14 @@ Resources:
                   - Fn::Sub:
                       - arn:aws:s3:::${ConfigBucketName}
                       - ConfigBucketName:
-                          Fn::ImportValue: !Sub "${StackName}:ConfigBucketName"
+                          Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
                   - Fn::Sub:
                       - arn:aws:s3:::${ConfigBucketName}/*
                       - ConfigBucketName:
-                          Fn::ImportValue: !Sub "${StackName}:ConfigBucketName"
+                          Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
@@ -158,7 +173,10 @@ Resources:
         FailureThreshold: 1
       Name: !Ref "ServiceName"
       NamespaceId:
-        Fn::ImportValue: !Join [":", [!Ref "StackName", "PrivateDNSNamespace"]]
+        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "PrivateDNSNamespace"]]
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
@@ -170,9 +188,8 @@ Resources:
       ResourceSignal:
         Timeout: PT10M
     Properties:
-      ServiceName: !Ref "ServiceName"
       Cluster:
-        Fn::ImportValue: !Join [":", [!Ref "StackName", "ClusterName"]]
+        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
       LaunchType: FARGATE
       DeploymentConfiguration:
         MaximumPercent: 200
@@ -183,12 +200,12 @@ Resources:
           AssignPublicIp: ENABLED
           SecurityGroups:
             - Fn::ImportValue:
-                !Join [":", [!Ref "StackName", "FargateContainerSecurityGroup"]]
+                !Join [":", [!Ref "InfrastructureStackName", "FargateContainerSecurityGroup"]]
           Subnets:
             - Fn::ImportValue:
-                !Join [":", [!Ref "StackName", "PrivateSubnetOne"]]
+                !Join [":", [!Ref "InfrastructureStackName", "PrivateSubnetOne"]]
             - Fn::ImportValue:
-                !Join [":", [!Ref "StackName", "PrivateSubnetTwo"]]
+                !Join [":", [!Ref "InfrastructureStackName", "PrivateSubnetTwo"]]
       TaskDefinition: !Ref "TaskDefinition"
       LoadBalancers:
         - ContainerName: !Ref "ServiceName"
@@ -197,6 +214,10 @@ Resources:
       ServiceRegistries:
         - RegistryArn: !GetAtt DiscoveryService.Arn
           Port: 8080
+      # PropagateTags: TASK_DEFINITION #Needs opting in
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
   # A target group. This is used for keeping track of all the tasks, and
   # what IP addresses / port numbers they have. You can query it yourself,
@@ -211,6 +232,9 @@ Resources:
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 120
       HealthyThresholdCount: 2
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "15"
       Matcher:
         HttpCode: "200,401,400"
       TargetType: ip
@@ -219,7 +243,10 @@ Resources:
       Protocol: HTTP
       UnhealthyThresholdCount: 2
       VpcId:
-        Fn::ImportValue: !Join [":", [!Ref "StackName", "VPCId"]]
+        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "VPCId"]]
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
   # Create a rule on the load balancer for routing traffic to the target group
   LoadBalancerRule:
@@ -232,5 +259,5 @@ Resources:
         - Field: path-pattern
           Values: [!Ref "Path"]
       ListenerArn:
-        Fn::ImportValue: !Join [":", [!Ref "StackName", "PublicListener"]]
+        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "PublicListener"]]
       Priority: !Ref "Priority"
