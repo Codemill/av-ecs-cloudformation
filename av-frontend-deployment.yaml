@@ -102,12 +102,7 @@ Resources:
                 aws s3 cp s3://${ConfigBucketName}/frontend/keycloak.json /usr/share/nginx/html/assets/json/keycloak.json; \
                 nginx -g 'daemon off;';
               - ConfigBucketName:
-                  Fn::ImportValue:
-                    !Join [
-                      ":",
-                      [!Ref "InfrastructureStackName", "ConfigBucketName"],
-                    ]
-
+                  Fn::ImportValue: !Sub ${InfrastructureStackName}:ConfigBucketName
           EntryPoint:
             - "sh"
             - "-c"
@@ -117,8 +112,7 @@ Resources:
             LogDriver: "awslogs"
             Options:
               awslogs-group:
-                Fn::ImportValue:
-                  !Join [":", [!Ref "InfrastructureStackName", "AVLogGroup"]]
+                Fn::ImportValue: !Sub ${InfrastructureStackName}:AVLogGroup
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
           RepositoryCredentials:
@@ -184,8 +178,7 @@ Resources:
     DependsOn: LoadBalancerRule
     Properties:
       Cluster:
-        Fn::ImportValue:
-          !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
+        Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 75
@@ -201,19 +194,10 @@ Resources:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
           SecurityGroups:
-            - Fn::ImportValue:
-                !Join [":", [!Ref "InfrastructureStackName", "AvFrontendSG"]]
+            - Fn::ImportValue: !Sub ${InfrastructureStackName}:AvFrontendSG
           Subnets:
-            - Fn::ImportValue:
-                !Join [
-                  ":",
-                  [!Ref "InfrastructureStackName", "PrivateSubnetOne"],
-                ]
-            - Fn::ImportValue:
-                !Join [
-                  ":",
-                  [!Ref "InfrastructureStackName", "PrivateSubnetTwo"],
-                ]
+            - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetOne
+            - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetTwo
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -241,7 +225,7 @@ Resources:
       Protocol: HTTP
       UnhealthyThresholdCount: 2
       VpcId:
-        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "VPCId"]]
+        Fn::ImportValue: !Sub ${InfrastructureStackName}:VPCId
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -257,8 +241,7 @@ Resources:
         - Field: path-pattern
           Values: [!Ref "Path"]
       ListenerArn:
-        Fn::ImportValue:
-          !Join [":", [!Ref "InfrastructureStackName", "PublicListener"]]
+        Fn::ImportValue: !Sub ${InfrastructureStackName}:PublicListener
       Priority: !Ref "Priority"
 
   UpdateServiceLambdaFunction:
@@ -282,8 +265,7 @@ Resources:
       Environment:
         Variables:
           CLUSTER_NAME:
-            Fn::ImportValue:
-              !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
+            Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
           SERVICE_NAME: !Ref Service
       Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn

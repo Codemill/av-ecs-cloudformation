@@ -137,8 +137,7 @@ Resources:
             LogDriver: "awslogs"
             Options:
               awslogs-group:
-                Fn::ImportValue:
-                  !Join [":", [!Ref "InfrastructureStackName", "AVLogGroup"]]
+                Fn::ImportValue: !Sub ${InfrastructureStackName}:AVLogGroup
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
           WorkingDirectory: "/opt/"
@@ -220,8 +219,7 @@ Resources:
         FailureThreshold: 1
       Name: !Ref "ServiceName"
       NamespaceId:
-        Fn::ImportValue:
-          !Join [":", [!Ref "InfrastructureStackName", "PrivateDNSNamespace"]]
+        Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateDNSNamespace
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -237,8 +235,7 @@ Resources:
         Timeout: PT10M
     Properties:
       Cluster:
-        Fn::ImportValue:
-          !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
+        Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
       LaunchType: FARGATE
       DeploymentConfiguration:
         MaximumPercent: 200
@@ -248,25 +245,10 @@ Resources:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
           SecurityGroups:
-            - Fn::ImportValue:
-                !Join [
-                  ":",
-                  [
-                    !Ref "InfrastructureStackName",
-                    "AvAnalyzeSG",
-                  ],
-                ]
+            - Fn::ImportValue: !Sub ${InfrastructureStackName}:AvAnalyzeSG
           Subnets:
-            - Fn::ImportValue:
-                !Join [
-                  ":",
-                  [!Ref "InfrastructureStackName", "PrivateSubnetOne"],
-                ]
-            - Fn::ImportValue:
-                !Join [
-                  ":",
-                  [!Ref "InfrastructureStackName", "PrivateSubnetTwo"],
-                ]
+            - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetOne
+            - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetTwo
       TaskDefinition: !Ref "TaskDefinition"
       LoadBalancers:
         - ContainerName: !Ref "ServiceName"
@@ -303,7 +285,7 @@ Resources:
       Protocol: HTTP
       UnhealthyThresholdCount: 2
       VpcId:
-        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "VPCId"]]
+        Fn::ImportValue: !Sub ${InfrastructureStackName}:VPCId
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -319,6 +301,5 @@ Resources:
         - Field: path-pattern
           Values: [!Ref "Path"]
       ListenerArn:
-        Fn::ImportValue:
-          !Join [":", [!Ref "InfrastructureStackName", "PublicListener"]]
+        Fn::ImportValue: !Sub ${InfrastructureStackName}:PublicListener
       Priority: !Ref "Priority"

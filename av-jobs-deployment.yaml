@@ -148,15 +148,14 @@ Resources:
             LogDriver: "awslogs"
             Options:
               awslogs-group:
-                Fn::ImportValue:
-                  !Join [":", [!Ref "InfrastructureStackName", "AVLogGroup"]]
+                Fn::ImportValue: !Sub ${InfrastructureStackName}:AVLogGroup
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
           Environment:
             - Name: QUARKUS_VERTX_CLUSTER_HOST
               Value: "0.0.0.0"
             - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_HOST
-              Value: !Join ["", [!Ref "ServiceName", ".av.local"]]
+              Value: !Sub ${ServiceName}.av.local
             - Name: AV_RUNNER_BLACK_FRAME_LOCATION
               Value: !Ref BlackFrameLocation
             - Name: AV_RUNNER_BLACK_FRAME_DURATION
@@ -184,11 +183,7 @@ Resources:
                 Fn::Sub:
                   - "http://${AdapterServiceName}.av.local:8080"
                   - AdapterServiceName:
-                      Fn::ImportValue:
-                        !Join [
-                          ":",
-                          [!Ref "AdapterStackName", "DiscoveryServiceName"],
-                        ]
+                      Fn::ImportValue: !Sub ${AdapterStackName}:DiscoveryServiceName
             - Name: AV_RUNNER_BINDIR
               Value: /usr/local/bin
           Secrets:
@@ -197,21 +192,13 @@ Resources:
                 Fn::Sub:
                   - "${AuthRunnerSecretArn}:username::"
                   - AuthRunnerSecretArn:
-                      Fn::ImportValue:
-                        !Join [
-                          ":",
-                          [!Ref "AdapterStackName", "AuthRunnerSecretArn"],
-                        ]
+                      Fn::ImportValue: !Sub ${AdapterStackName}:AuthRunnerSecretArn
             - Name: AP_ADAPTER_PASSWORD
               ValueFrom:
                 Fn::Sub:
                   - "${AuthRunnerSecretArn}:password::"
                   - AuthRunnerSecretArn:
-                      Fn::ImportValue:
-                        !Join [
-                          ":",
-                          [!Ref "AdapterStackName", "AuthRunnerSecretArn"],
-                        ]
+                      Fn::ImportValue: !Sub ${AdapterStackName}:AuthRunnerSecretArn
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -270,8 +257,7 @@ Resources:
     Type: AWS::ECS::Service
     Properties:
       Cluster:
-        Fn::ImportValue:
-          !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
+        Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
       LaunchType: FARGATE
       DeploymentConfiguration:
         MaximumPercent: 200
@@ -280,19 +266,10 @@ Resources:
       NetworkConfiguration:
         AwsvpcConfiguration:
           SecurityGroups:
-            - Fn::ImportValue:
-                !Join [":", [!Ref "InfrastructureStackName", "AvJobsSG"]]
+            - Fn::ImportValue: !Sub ${InfrastructureStackName}:AvJobsSG
           Subnets:
-            - Fn::ImportValue:
-                !Join [
-                  ":",
-                  [!Ref "InfrastructureStackName", "PrivateSubnetOne"],
-                ]
-            - Fn::ImportValue:
-                !Join [
-                  ":",
-                  [!Ref "InfrastructureStackName", "PrivateSubnetTwo"],
-                ]
+            - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetOne
+            - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetTwo
       TaskDefinition: !Ref "TaskDefinition"
       Tags:
         - Key: application
@@ -320,8 +297,7 @@ Resources:
       Environment:
         Variables:
           CLUSTER_NAME:
-            Fn::ImportValue:
-              !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
+            Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
           SERVICE_NAME: !Ref Service
       Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn

@@ -368,7 +368,7 @@ Resources:
       IpProtocol: "tcp"
       FromPort: 80
       ToPort: 80
-      SourceSecurityGroupId: !Ref "PublicLoadBalancerSG"
+      SourceSecurityGroupId: !Ref "PublicLoadBalancerSG" #TODO: Validate this
       GroupId: !Ref AvFrontendSG
   
   AvAnalyzeSG:
@@ -561,105 +561,99 @@ Outputs:
     Description: The name of the AV Config Bucket
     Value: !Ref "ConfigBucket"
     Export:
-      Name: !Join [":", [!Ref "AWS::StackName", "ConfigBucketName"]]
+      Name: !Sub ${AWS::StackName}:ConfigBucketName
   BackendSettingsUpdatedTopicArn:
     Description: The SNS topic notified when backend configuration files have changed
     Value: !Ref "BackendSettingsUpdatedTopic"
     Export:
-      Name: !Join [":", [!Ref "AWS::StackName", "BackendSettingsUpdatedTopicArn"]]
+      Name: !Sub ${AWS::StackName}:BackendSettingsUpdatedTopicArn
   FrontendSettingsUpdatedTopicArn:
     Description: The SNS topic notified when frontend configuration files have changed
     Value: !Ref "FrontendSettingsUpdatedTopic"
     Export:
-      Name: !Join [":", [!Ref "AWS::StackName", "FrontendSettingsUpdatedTopicArn"]]
+      Name: !Sub ${AWS::StackName}:FrontendSettingsUpdatedTopicArn
   LogGroup:
     Description: The name of the AV Log Group
     Value: !Ref "AVLogGroup"
     Export:
-      Name: !Join [":", [!Ref "AWS::StackName", "AVLogGroup"]]
+      Name: !Sub ${AWS::StackName}:AVLogGroup
   ClusterName:
     Description: The name of the ECS cluster
     Value: !Ref "ECSCluster"
     Export:
-      Name: !Join [":", [!Ref "AWS::StackName", "ClusterName"]]
+      Name: !Sub ${AWS::StackName}:ClusterName
   DBEndpoint:
     Description: The endpoint of the database
     Value: !GetAtt "DBInstance.Endpoint.Address"
     Export:
-      Name: !Join [":", [!Ref "AWS::StackName", "DBEndpoint"]]
+      Name: !Sub ${AWS::StackName}:DBEndpoint
   ExternalUrl:
     Description: The url of the external load balancer
-    Value: !Join ["", ["http://", !GetAtt "PublicLoadBalancer.DNSName"]]
+    Value: !Sub http://${PublicLoadBalancer.DNSName}
     Export:
-      Name: !Join [":", [!Ref "AWS::StackName", "ExternalUrl"]]
+      Name: !Sub ${AWS::StackName}:ExternalUrl
   PublicListener:
     Description: The ARN of the public load balancer's Listener
     Value: !Ref PublicLoadBalancerListener
     Export:
-      Name: !Join [":", [!Ref "AWS::StackName", "PublicListener"]]
+      Name: !Sub ${AWS::StackName}:PublicListener
   VPCId:
     Description: The ID of the VPC that this stack is deployed in
     Value: !Ref "VPC"
     Export:
-      Name: !Join [":", [!Ref "AWS::StackName", "VPCId"]]
+      Name: !Sub ${AWS::StackName}:VPCId
   PublicSubnetOne:
     Description: Public subnet one
     Value: !Ref "PublicSubnetOne"
     Export:
-      Name: !Join [":", [!Ref "AWS::StackName", "PublicSubnetOne"]]
+      Name: !Sub ${AWS::StackName}:PublicSubnetOne
   PublicSubnetTwo:
     Description: Public subnet two
     Value: !Ref "PublicSubnetTwo"
     Export:
-      Name: !Join [":", [!Ref "AWS::StackName", "PublicSubnetTwo"]]
+      Name: !Sub ${AWS::StackName}:PublicSubnetTwo
   PrivateSubnetOne:
     Description: Private subnet one
     Value: !Ref "PrivateSubnetOne"
     Export:
-      Name: !Join [":", [!Ref "AWS::StackName", "PrivateSubnetOne"]]
+      Name: !Sub ${AWS::StackName}:PrivateSubnetOne
   PrivateSubnetTwo:
     Description: Private subnet two
     Value: !Ref "PrivateSubnetTwo"
     Export:
-      Name: !Join [":", [!Ref "AWS::StackName", "PrivateSubnetTwo"]]
+      Name: !Sub ${AWS::StackName}:PrivateSubnetTwo
   PrivateNamespace:
     Description: Private DNS namespace
     Value: !Ref "PrivateDNSNamespace"
     Export:
-      Name: !Join [":", [!Ref "AWS::StackName", "PrivateDNSNamespace"]]
+      Name: !Sub ${AWS::StackName}:PrivateDNSNamespace
   RdsDatabaseSG:
     Description: Security group for the RDS instance
     Value: !Ref RdsDatabaseSG
     Export:
-      Name:
-        !Join [":", [!Ref "AWS::StackName", "RdsDatabaseSG"]]
+      Name: !Sub ${AWS::StackName}:RdsDatabaseSG
   AvAdapterSG:
     Description: Security group for the Adapter service
     Value: !Ref AvAdapterSG
     Export:
-      Name:
-        !Join [":", [!Ref "AWS::StackName", "AvAdapterSG"]]
+      Name: !Sub ${AWS::StackName}:AvAdapterSG
   AvFrontendSG:
     Description: Security group for the Frontend service
     Value: !Ref AvFrontendSG
     Export:
-      Name:
-        !Join [":", [!Ref "AWS::StackName", "AvFrontendSG"]]
+      Name: !Sub ${AWS::StackName}:AvFrontendSG
   AvAnalyzeSG:
     Description: Security group for the Analyze service
     Value: !Ref AvAnalyzeSG
     Export:
-      Name:
-        !Join [":", [!Ref "AWS::StackName", "AvAnalyzeSG"]]
+      Name: !Sub ${AWS::StackName}:AvAnalyzeSG
   AvJobsSG:
     Description: Security group for the Jobs service
     Value: !Ref AvJobsSG
     Export:
-      Name:
-        !Join [":", [!Ref "AWS::StackName", "AvJobsSG"]]
+      Name: !Sub ${AWS::StackName}:AvJobsSG
   RDSInstanceSecretArn:
     Description: Secrets Manager Secret ARN for RDS instance
     Value: !Ref "RDSInstanceSecret"
     Export:
-      Name:
-        !Join [":", [!Ref "AWS::StackName", "RDSInstanceSecretArn"]]
+      Name: !Sub ${AWS::StackName}:RDSInstanceSecretArn
