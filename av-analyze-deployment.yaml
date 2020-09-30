@@ -17,16 +17,12 @@ Parameters:
     Description: The ecr repo and tag to use for image deployment
   ImageTag:
     Type: String
-    Default: 1.1.1
+    Default: 1.2.1
     Description: The ecr repo and tag to use for image deployment
   RegistryCredentials:
     Type: String
     Default: arn:aws:secretsmanager:eu-north-1:653767197116:secret:jfrog-docker-gitlabci-50X7p1
     Description: Credentials to codemill.jfrog.io for pulling docker images
-  ContainerPort:
-    Type: Number
-    Default: 8080
-    Description: What port number the application inside the docker container is binding to
   ContainerCpu:
     Type: Number
     Default: 256
@@ -57,6 +53,54 @@ Parameters:
     AllowedValues:
       - "Accurate Video"
 
+  ApAnalyzeCacheDays:
+    Type: String
+    Default: "5"
+    Description: Number of days
+  ApAnalyzeCacheDir:
+    Type: String
+    Default: "/tmp/wav"
+    Description: ""
+  QuarkusHttpCors:
+    Type: String
+    Default: "true"
+    Description: ""
+  HttpPathPrefix:
+    Type: String
+    Default: "/api"
+    Description: ""
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Service configuration"
+        Parameters:
+          - ServiceName
+          - ContainerCpu
+          - ContainerMemory
+          - DesiredCount
+          - Priority
+          - Path
+      - Label:
+          default: "Image configuration"
+        Parameters:
+          - ImageRepoName
+          - ImageTag
+          - RegistryCredentials
+      - Label:
+          default: "...configuration"
+        Parameters:
+          - ApAnalyzeCacheDays
+          - ApAnalyzeCacheDir
+          - QuarkusHttpCors
+          - HttpPathPrefix
+      - Label:
+          default: "Other"
+        Parameters:
+          - InfrastructureStackName
+          - ApplicationTag
+
 Resources:
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
@@ -80,7 +124,7 @@ Resources:
           RepositoryCredentials:
             CredentialsParameter: !Ref "RegistryCredentials"
           PortMappings:
-            - ContainerPort: !Ref "ContainerPort"
+            - ContainerPort: 8080
             - ContainerPort: 5700
             - ContainerPort: 5701
             - ContainerPort: 5702
@@ -93,17 +137,20 @@ Resources:
             LogDriver: "awslogs"
             Options:
               awslogs-group:
-                Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "AVLogGroup"]]
+                Fn::ImportValue:
+                  !Join [":", [!Ref "InfrastructureStackName", "AVLogGroup"]]
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
           WorkingDirectory: "/opt/"
           Environment:
             - Name: AP_ANALYZE_CACHE_DAYS
-              Value: "5"
+              Value: !Ref ApAnalyzeCacheDays
             - Name: AP_ANALYZE_CACHE_DIR
-              Value: "/tmp/wav"
+              Value: !Ref ApAnalyzeCacheDir
             - Name: QUARKUS_HTTP_CORS
-              Value: "true"
+              Value: !Ref QuarkusHttpCors
+            - Name: HTTP_PATH_PREFIX
+              Value: !Ref HttpPathPrefix
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -173,7 +220,8 @@ Resources:
         FailureThreshold: 1
       Name: !Ref "ServiceName"
       NamespaceId:
-        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "PrivateDNSNamespace"]]
+        Fn::ImportValue:
+          !Join [":", [!Ref "InfrastructureStackName", "PrivateDNSNamespace"]]
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -189,7 +237,8 @@ Resources:
         Timeout: PT10M
     Properties:
       Cluster:
-        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
+        Fn::ImportValue:
+          !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
       LaunchType: FARGATE
       DeploymentConfiguration:
         MaximumPercent: 200
@@ -200,21 +249,32 @@ Resources:
           AssignPublicIp: ENABLED
           SecurityGroups:
             - Fn::ImportValue:
-                !Join [":", [!Ref "InfrastructureStackName", "FargateContainerSecurityGroup"]]
+                !Join [
+                  ":",
+                  [
+                    !Ref "InfrastructureStackName",
+                    "AvAnalyzeSG",
+                  ],
+                ]
           Subnets:
             - Fn::ImportValue:
-                !Join [":", [!Ref "InfrastructureStackName", "PrivateSubnetOne"]]
+                !Join [
+                  ":",
+                  [!Ref "InfrastructureStackName", "PrivateSubnetOne"],
+                ]
             - Fn::ImportValue:
-                !Join [":", [!Ref "InfrastructureStackName", "PrivateSubnetTwo"]]
+                !Join [
+                  ":",
+                  [!Ref "InfrastructureStackName", "PrivateSubnetTwo"],
+                ]
       TaskDefinition: !Ref "TaskDefinition"
       LoadBalancers:
         - ContainerName: !Ref "ServiceName"
-          ContainerPort: !Ref "ContainerPort"
+          ContainerPort: 8080
           TargetGroupArn: !Ref "TargetGroup"
       ServiceRegistries:
         - RegistryArn: !GetAtt DiscoveryService.Arn
           Port: 8080
-      # PropagateTags: TASK_DEFINITION #Needs opting in
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -239,7 +299,7 @@ Resources:
         HttpCode: "200,401,400"
       TargetType: ip
       Name: !Ref "ServiceName"
-      Port: !Ref "ContainerPort"
+      Port: 8080
       Protocol: HTTP
       UnhealthyThresholdCount: 2
       VpcId:
@@ -259,5 +319,6 @@ Resources:
         - Field: path-pattern
           Values: [!Ref "Path"]
       ListenerArn:
-        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "PublicListener"]]
+        Fn::ImportValue:
+          !Join [":", [!Ref "InfrastructureStackName", "PublicListener"]]
       Priority: !Ref "Priority"

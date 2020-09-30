@@ -19,10 +19,6 @@ Parameters:
     Type: String
     Default: v4.2.2-rc.0
     Description: The ecr repo and tag to use for image deployment
-  ContainerPort:
-    Type: Number
-    Default: 80
-    Description: What port number the application inside the docker container is binding to
   ContainerCpu:
     Type: Number
     Default: 256
@@ -56,6 +52,31 @@ Parameters:
     Default: "Accurate Video"
     AllowedValues:
       - "Accurate Video"
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Service configuration"
+        Parameters:
+          - ServiceName
+          - ContainerCpu
+          - ContainerMemory
+          - DesiredCount
+          - Priority
+          - Path
+      - Label:
+          default: "Image configuration"
+        Parameters:
+          - ImageRepoName
+          - ImageTag
+          - RegistryCredentials
+      - Label:
+          default: "Other"
+        Parameters:
+          - InfrastructureStackName
+          - ApplicationTag
+
 # The task definition. This is a simple metadata description of what
 # container to run, and what resource requirements it has.
 Resources:
@@ -77,12 +98,15 @@ Resources:
             - !Sub
               - |
                 apk add aws-cli; \
-                aws s3 cp s3://${ConfigBucketName}/settings.js /usr/share/nginx/html/assets/json/settings.js; \
-                aws s3 cp s3://${ConfigBucketName}/keycloak.json /usr/share/nginx/html/assets/json/keycloak.json; \
+                aws s3 cp s3://${ConfigBucketName}/frontend/settings.js /usr/share/nginx/html/assets/json/settings.js; \
+                aws s3 cp s3://${ConfigBucketName}/frontend/keycloak.json /usr/share/nginx/html/assets/json/keycloak.json; \
                 nginx -g 'daemon off;';
               - ConfigBucketName:
                   Fn::ImportValue:
-                    !Join [":", [!Ref "InfrastructureStackName", "ConfigBucketName"]]
+                    !Join [
+                      ":",
+                      [!Ref "InfrastructureStackName", "ConfigBucketName"],
+                    ]
 
           EntryPoint:
             - "sh"
@@ -93,13 +117,14 @@ Resources:
             LogDriver: "awslogs"
             Options:
               awslogs-group:
-                Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "AVLogGroup"]]
+                Fn::ImportValue:
+                  !Join [":", [!Ref "InfrastructureStackName", "AVLogGroup"]]
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
           RepositoryCredentials:
             CredentialsParameter: !Ref "RegistryCredentials"
           PortMappings:
-            - ContainerPort: !Ref "ContainerPort"
+            - ContainerPort: 80
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -159,7 +184,8 @@ Resources:
     DependsOn: LoadBalancerRule
     Properties:
       Cluster:
-        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
+        Fn::ImportValue:
+          !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 75
@@ -169,19 +195,25 @@ Resources:
       LaunchType: FARGATE
       LoadBalancers:
         - ContainerName: !Ref "ServiceName"
-          ContainerPort: !Ref "ContainerPort"
+          ContainerPort: 80
           TargetGroupArn: !Ref "TargetGroup"
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: ENABLED
           SecurityGroups:
-            - Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "AvFrontendSG"]]
+            - Fn::ImportValue:
+                !Join [":", [!Ref "InfrastructureStackName", "AvFrontendSG"]]
           Subnets:
             - Fn::ImportValue:
-                !Join [":", [!Ref "InfrastructureStackName", "PrivateSubnetOne"]]
+                !Join [
+                  ":",
+                  [!Ref "InfrastructureStackName", "PrivateSubnetOne"],
+                ]
             - Fn::ImportValue:
-                !Join [":", [!Ref "InfrastructureStackName", "PrivateSubnetTwo"]]
-      # PropagateTags: TASK_DEFINITION #Needs opting in
+                !Join [
+                  ":",
+                  [!Ref "InfrastructureStackName", "PrivateSubnetTwo"],
+                ]
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -205,7 +237,7 @@ Resources:
         - Key: deregistration_delay.timeout_seconds
           Value: "15"
       Name: !Ref "ServiceName"
-      Port: !Ref "ContainerPort"
+      Port: 80
       Protocol: HTTP
       UnhealthyThresholdCount: 2
       VpcId:
@@ -225,7 +257,8 @@ Resources:
         - Field: path-pattern
           Values: [!Ref "Path"]
       ListenerArn:
-        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "PublicListener"]]
+        Fn::ImportValue:
+          !Join [":", [!Ref "InfrastructureStackName", "PublicListener"]]
       Priority: !Ref "Priority"
 
   UpdateServiceLambdaFunction:
@@ -249,7 +282,8 @@ Resources:
       Environment:
         Variables:
           CLUSTER_NAME:
-            Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
+            Fn::ImportValue:
+              !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
           SERVICE_NAME: !Ref Service
       Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
@@ -263,10 +297,9 @@ Resources:
     Type: AWS::SNS::Subscription
     Properties:
       Endpoint: !GetAtt UpdateServiceLambdaFunction.Arn
-      # FilterPolicy: Json
       Protocol: lambda
       TopicArn:
-        Fn::ImportValue: !Sub "${InfrastructureStackName}:SettingsUpdatedTopicArn"
+        Fn::ImportValue: !Sub "${InfrastructureStackName}:FrontendSettingsUpdatedTopicArn"
 
   LambdaPermission:
     Type: AWS::Lambda::Permission
@@ -275,7 +308,7 @@ Resources:
       FunctionName: !Ref UpdateServiceLambdaFunction
       Principal: sns.amazonaws.com
       SourceArn:
-        Fn::ImportValue: !Sub "${InfrastructureStackName}:SettingsUpdatedTopicArn"
+        Fn::ImportValue: !Sub "${InfrastructureStackName}:FrontendSettingsUpdatedTopicArn"
 
   LambdaExecutionRole:
     Type: AWS::IAM::Role

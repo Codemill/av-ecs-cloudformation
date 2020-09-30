@@ -23,10 +23,6 @@ Parameters:
     Type: String
     Default: 4.2.1
     Description: The ecr repo and tag to use for image deployment
-  ContainerPort:
-    Type: Number
-    Default: 8080
-    Description: What port number the application inside the docker container is binding to
   ContainerCpu:
     Type: Number
     Default: 256
@@ -61,15 +57,39 @@ Parameters:
     AllowedValues:
       - "Accurate Video"
 
-Resources:
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Service configuration"
+        Parameters:
+          - ServiceName
+          - ContainerCpu
+          - ContainerMemory
+          - DesiredCount
+          - Priority
+          - Path
+          - DBName
+      - Label:
+          default: "Image configuration"
+        Parameters:
+          - ImageRepoName
+          - ImageTag
+          - RegistryCredentials
+      - Label:
+          default: "Other"
+        Parameters:
+          - InfrastructureStackName
+          - ApplicationTag
 
+Resources:
   AuthRunnerSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Description: 'Auth Runner secret'
+      Description: "Auth Runner secret"
       GenerateSecretString:
         SecretStringTemplate: '{"username": "runner"}'
-        GenerateStringKey: 'password'
+        GenerateStringKey: "password"
         PasswordLength: 16
         ExcludeCharacters: '"@/\'
       Tags:
@@ -96,7 +116,7 @@ Resources:
           Memory: !Ref "ContainerMemory"
           Image: !Sub ${ImageRepoName}:${ImageTag}
           PortMappings:
-            - ContainerPort: !Ref "ContainerPort"
+            - ContainerPort: 8080
             - ContainerPort: 5700
             - ContainerPort: 5701
             - ContainerPort: 5702
@@ -104,7 +124,8 @@ Resources:
             LogDriver: "awslogs"
             Options:
               awslogs-group:
-                Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "AVLogGroup"]]
+                Fn::ImportValue:
+                  !Join [":", [!Ref "InfrastructureStackName", "AVLogGroup"]]
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
           RepositoryCredentials:
@@ -135,7 +156,10 @@ Resources:
                 - "jdbc:postgresql://${DBUrl}/${dbName}"
                 - DBUrl:
                     Fn::ImportValue:
-                      !Join [":", [!Ref "InfrastructureStackName", "DBEndpoint"]]
+                      !Join [
+                        ":",
+                        [!Ref "InfrastructureStackName", "DBEndpoint"],
+                      ]
                   dbName: !Ref "DBName"
             - Name: QUARKUS_FLYWAY_BASELINE-ON-MIGRATE
               Value: "false"
@@ -160,16 +184,30 @@ Resources:
           Secrets:
             - Name: QUARKUS_DATASOURCE_USERNAME
               ValueFrom:
-                  Fn::Sub:
-                    - "${RDSInstanceSecretArn}:username::"
-                    - RDSInstanceSecretArn:
-                        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "RDSInstanceSecretArn"]]
+                Fn::Sub:
+                  - "${RDSInstanceSecretArn}:username::"
+                  - RDSInstanceSecretArn:
+                      Fn::ImportValue:
+                        !Join [
+                          ":",
+                          [
+                            !Ref "InfrastructureStackName",
+                            "RDSInstanceSecretArn",
+                          ],
+                        ]
             - Name: QUARKUS_DATASOURCE_PASSWORD
               ValueFrom:
-                  Fn::Sub:
-                    - "${RDSInstanceSecretArn}:password::"
-                    - RDSInstanceSecretArn:
-                        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "RDSInstanceSecretArn"]]
+                Fn::Sub:
+                  - "${RDSInstanceSecretArn}:password::"
+                  - RDSInstanceSecretArn:
+                      Fn::ImportValue:
+                        !Join [
+                          ":",
+                          [
+                            !Ref "InfrastructureStackName",
+                            "RDSInstanceSecretArn",
+                          ],
+                        ]
             - Name: AUTH_RUNNER_USERNAME
               ValueFrom: !Sub "${AuthRunnerSecret}:username::"
             - Name: AUTH_RUNNER_PASSWORD
@@ -208,10 +246,10 @@ Resources:
               - Effect: Allow
                 Action:
                   - "rds-db:connect"
-                Resource: "*"
-              - Effect: Allow #TODO: Tighten this up
+                Resource: "*" #TODO: Tighten this up, limit db
+              - Effect: Allow
                 Action:
-                  - "s3:*"
+                  - "s3:*" #TODO: Tighten this up, shouldn't create nor delete buckets
                 Resource: "*"
               - Effect: Allow
                 Action:
@@ -248,7 +286,8 @@ Resources:
         FailureThreshold: 1
       Name: !Ref "ServiceName"
       NamespaceId:
-        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "PrivateDNSNamespace"]]
+        Fn::ImportValue:
+          !Join [":", [!Ref "InfrastructureStackName", "PrivateDNSNamespace"]]
       # Tags:
       #   - Key: application
       #     Value: !Ref ApplicationTag
@@ -261,7 +300,8 @@ Resources:
     DependsOn: LoadBalancerRule
     Properties:
       Cluster:
-        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
+        Fn::ImportValue:
+          !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
       LaunchType: FARGATE
       DeploymentConfiguration:
         MaximumPercent: 200
@@ -275,18 +315,23 @@ Resources:
                 !Join [":", [!Ref "InfrastructureStackName", "AvAdapterSG"]]
           Subnets:
             - Fn::ImportValue:
-                !Join [":", [!Ref "InfrastructureStackName", "PrivateSubnetOne"]]
+                !Join [
+                  ":",
+                  [!Ref "InfrastructureStackName", "PrivateSubnetOne"],
+                ]
             - Fn::ImportValue:
-                !Join [":", [!Ref "InfrastructureStackName", "PrivateSubnetTwo"]]
+                !Join [
+                  ":",
+                  [!Ref "InfrastructureStackName", "PrivateSubnetTwo"],
+                ]
       TaskDefinition: !Ref "TaskDefinition"
       LoadBalancers:
         - ContainerName: !Ref "ServiceName"
-          ContainerPort: !Ref "ContainerPort"
+          ContainerPort: 8080
           TargetGroupArn: !Ref "TargetGroup"
       ServiceRegistries:
         - RegistryArn: !GetAtt DiscoveryService.Arn
           Port: 8080
-      # PropagateTags: TASK_DEFINITION #Needs opting in
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -311,7 +356,7 @@ Resources:
         HttpCode: "200,401"
       TargetType: ip
       Name: !Ref "ServiceName"
-      Port: !Ref "ContainerPort"
+      Port: 8080
       Protocol: HTTP
       UnhealthyThresholdCount: 2
       VpcId:
@@ -330,20 +375,104 @@ Resources:
         - Field: path-pattern
           Values: [!Ref "Path"]
       ListenerArn:
-        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "PublicListener"]]
+        Fn::ImportValue:
+          !Join [":", [!Ref "InfrastructureStackName", "PublicListener"]]
       Priority: !Ref "Priority"
+
+  UpdateServiceLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        ZipFile: |
+          const AWS = require('aws-sdk');
+          const ecs = new AWS.ECS();
+          exports.handler = function(event, context, callback) {
+            var params = {
+              service: process.env.SERVICE_NAME, 
+              cluster: process.env.CLUSTER_NAME,
+              forceNewDeployment: true
+            };
+            ecs.updateService(params, function(err, data) {
+              if (err) console.log(err, err.stack); // an error occurred
+              else     console.log(data);           // successful response
+            });
+          };
+      Environment:
+        Variables:
+          CLUSTER_NAME:
+            Fn::ImportValue:
+              !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
+          SERVICE_NAME: !Ref Service
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: nodejs12.x
+      Timeout: 5
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  ConfigSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !GetAtt UpdateServiceLambdaFunction.Arn
+      Protocol: lambda
+      TopicArn:
+        Fn::ImportValue: !Sub "${InfrastructureStackName}:BackendSettingsUpdatedTopicArn"
+
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref UpdateServiceLambdaFunction
+      Principal: sns.amazonaws.com
+      SourceArn:
+        Fn::ImportValue: !Sub "${InfrastructureStackName}:BackendSettingsUpdatedTopicArn"
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - ecs:UpdateService
+                Resource:
+                  - Fn::Sub:
+                      - arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${Service.Name}
+                      - ClusterName:
+                          Fn::ImportValue: !Sub "${InfrastructureStackName}:ClusterName"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
 Outputs:
   AuthRunnerSecretArn:
     Description: Secrets Manager Secret ARN for Auth Runner
     Value: !Ref "AuthRunnerSecret"
     Export:
-      Name:
-        !Join [":", [!Ref "AWS::StackName", "AuthRunnerSecretArn"]]
+      Name: !Join [":", [!Ref "AWS::StackName", "AuthRunnerSecretArn"]]
 
   ServiceName:
     Description: Service name
     Value: !GetAtt "DiscoveryService.Name"
     Export:
-      Name:
-        !Join [":", [!Ref "AWS::StackName", "DiscoveryServiceName"]]
+      Name: !Join [":", [!Ref "AWS::StackName", "DiscoveryServiceName"]]

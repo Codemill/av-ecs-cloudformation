@@ -10,8 +10,7 @@ Parameters:
   AdapterStackName:
     Type: String
     Default: av-adapter
-    Description:
-      The name of the adapter stack that you created. Necessary
+    Description: The name of the Adapter stack that you created. Necessary
       to locate and reference resources created by that stack.
   ServiceName:
     Type: String
@@ -20,18 +19,18 @@ Parameters:
   ImageRepoName:
     Type: String
     Default: codemill-docker.jfrog.io/accurate-player/accurate-video-jobs
-    Description: The ecr repo and tag to use for image deployment
+    Description: The docker image repo to use for image deployment
   ImageTag:
     Type: String
     Default: 4.2.1
-    Description: The ecr tag to use for image deployment
+    Description: The docker image tag to use for image deployment
   RegistryCredentials:
     Type: String
     Default: arn:aws:secretsmanager:eu-north-1:653767197116:secret:jfrog-docker-gitlabci-50X7p1
     Description: Credentials to codemill.jfrog.io for pulling docker images
   ContainerCpu:
     Type: Number
-    Default: 256
+    Default: 512
     Description: How much CPU to give the container. 1024 is 1 CPU
   ContainerMemory:
     Type: Number
@@ -44,12 +43,84 @@ Parameters:
   ApplicationTag:
     Type: String
     Default: "Accurate Video"
+    Description: Used to tag all resources
     AllowedValues:
       - "Accurate Video"
+  BlackFrameLocation:
+    Type: String
+    Default: "s3://av-black-frame-codemill/black25.mp4"
+    Description: Black frame file used
+  BlackFrameDuration:
+    Type: String
+    Default: "1200"
+    Description: Black frame duration
+  BlackFrameNumerator:
+    Type: String
+    Default: "25"
+    Description: Black frame numerator
+  BlackFrameDenominator:
+    Type: String
+    Default: "1"
+    Description: Black frame denominator
+  LowresTemplateId:
+    Type: String
+    Default: "standard_h264_follow"
+    Description: Low resolution template ID
+  AudioExtractTemplateId:
+    Type: String
+    Default: "wav"
+    Description: Audio extraction template ID
+  AwsRole:
+    Type: String
+    Description: IAM role that Elemental can use to access different media locations
+  ElementalQueue:
+    Type: String
+    Description: Will use default queue if not configured
 
-# The task definition. This is a simple metadata description of what
-# container to run, and what resource requirements it has.
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Service configuration"
+        Parameters:
+          - ServiceName
+          - ContainerCpu
+          - ContainerMemory
+          - DesiredCount
+      - Label:
+          default: "Image configuration"
+        Parameters:
+          - ImageRepoName
+          - ImageTag
+          - RegistryCredentials
+      - Label:
+          default: "Elemental configuration"
+        Parameters:
+          - BlackFrameLocation
+          - BlackFrameDuration
+          - BlackFrameNumerator
+          - BlackFrameDenominator
+          - LowresTemplateId
+          - AudioExtractTemplateId
+      - Label:
+          default: "Elemental configuration (optional)"
+        Parameters:
+          - AwsRole
+          - ElementalQueue
+      - Label:
+          default: "Other"
+        Parameters:
+          - InfrastructureStackName
+          - AdapterStackName
+          - ApplicationTag
+
+Conditions:
+  UseElementalAwsRole: !Not [ !Equals [!Ref AwsRole, ""] ]
+  UseElementalQueue: !Not [ !Equals [!Ref ElementalQueue, ""] ]
+
 Resources:
+  # The task definition. This is a simple metadata description of what
+  # container to run, and what resource requirements it has.
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     CreationPolicy:
@@ -77,7 +148,8 @@ Resources:
             LogDriver: "awslogs"
             Options:
               awslogs-group:
-                Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "AVLogGroup"]]
+                Fn::ImportValue:
+                  !Join [":", [!Ref "InfrastructureStackName", "AVLogGroup"]]
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
           Environment:
@@ -85,27 +157,61 @@ Resources:
               Value: "0.0.0.0"
             - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_HOST
               Value: !Join ["", [!Ref "ServiceName", ".av.local"]]
+            - Name: AV_RUNNER_BLACK_FRAME_LOCATION
+              Value: !Ref BlackFrameLocation
+            - Name: AV_RUNNER_BLACK_FRAME_DURATION
+              Value: !Ref BlackFrameDuration
+            - Name: AV_RUNNER_BLACK_FRAME_NUMERATOR
+              Value: !Ref BlackFrameNumerator
+            - Name: AV_RUNNER_BLACK_FRAME_DENOMINATOR
+              Value: !Ref BlackFrameDenominator
+            - Name: AV_RUNNER_LOWRES_TEMPLATE_ID
+              Value: !Ref LowresTemplateId
+            - Name: AV_RUNNER_AUDIO_EXTRACT_TEMPLATE_ID
+              Value: !Ref AudioExtractTemplateId
+            - !If
+              - UseElementalQueue
+              - Name: AV_RUNNER_ELEMENTAL_QUEUE
+                Value: !Ref ElementalQueue
+              - !Ref AWS::NoValue
+            - !If
+              - UseElementalAwsRole
+              - Name: AV_RUNNER_AWS_ROLE
+                Value: !Ref AwsRole
+              - !Ref AWS::NoValue
             - Name: AP_ADAPTER_URL_MP_REST_URL
               Value:
                 Fn::Sub:
                   - "http://${AdapterServiceName}.av.local:8080"
                   - AdapterServiceName:
-                      Fn::ImportValue: !Join [":", [!Ref "AdapterStackName", "DiscoveryServiceName"]]
+                      Fn::ImportValue:
+                        !Join [
+                          ":",
+                          [!Ref "AdapterStackName", "DiscoveryServiceName"],
+                        ]
             - Name: AV_RUNNER_BINDIR
               Value: /usr/local/bin
           Secrets:
             - Name: AP_ADAPTER_USERNAME
               ValueFrom:
-                  Fn::Sub:
-                    - "${AuthRunnerSecretArn}:username::"
-                    - AuthRunnerSecretArn:
-                        Fn::ImportValue: !Join [":", [!Ref "AdapterStackName", "AuthRunnerSecretArn"]]
+                Fn::Sub:
+                  - "${AuthRunnerSecretArn}:username::"
+                  - AuthRunnerSecretArn:
+                      Fn::ImportValue:
+                        !Join [
+                          ":",
+                          [!Ref "AdapterStackName", "AuthRunnerSecretArn"],
+                        ]
             - Name: AP_ADAPTER_PASSWORD
               ValueFrom:
-                  Fn::Sub:
-                    - "${AuthRunnerSecretArn}:password::"
-                    - AuthRunnerSecretArn:
-                        Fn::ImportValue: !Join [":", [!Ref "AdapterStackName", "AuthRunnerSecretArn"]]
+                Fn::Sub:
+                  - "${AuthRunnerSecretArn}:password::"
+                  - AuthRunnerSecretArn:
+                      Fn::ImportValue:
+                        !Join [
+                          ":",
+                          [!Ref "AdapterStackName", "AuthRunnerSecretArn"],
+                        ]
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -164,7 +270,8 @@ Resources:
     Type: AWS::ECS::Service
     Properties:
       Cluster:
-        Fn::ImportValue: !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
+        Fn::ImportValue:
+          !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
       LaunchType: FARGATE
       DeploymentConfiguration:
         MaximumPercent: 200
@@ -177,11 +284,102 @@ Resources:
                 !Join [":", [!Ref "InfrastructureStackName", "AvJobsSG"]]
           Subnets:
             - Fn::ImportValue:
-                !Join [":", [!Ref "InfrastructureStackName", "PrivateSubnetOne"]]
+                !Join [
+                  ":",
+                  [!Ref "InfrastructureStackName", "PrivateSubnetOne"],
+                ]
             - Fn::ImportValue:
-                !Join [":", [!Ref "InfrastructureStackName", "PrivateSubnetTwo"]]
+                !Join [
+                  ":",
+                  [!Ref "InfrastructureStackName", "PrivateSubnetTwo"],
+                ]
       TaskDefinition: !Ref "TaskDefinition"
-      # PropagateTags: TASK_DEFINITION #Needs opting in
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+
+  UpdateServiceLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        ZipFile: |
+          const AWS = require('aws-sdk');
+          const ecs = new AWS.ECS();
+          exports.handler = function(event, context, callback) {
+            var params = {
+              service: process.env.SERVICE_NAME, 
+              cluster: process.env.CLUSTER_NAME,
+              forceNewDeployment: true
+            };
+            ecs.updateService(params, function(err, data) {
+              if (err) console.log(err, err.stack); // an error occurred
+              else     console.log(data);           // successful response
+            });
+          };
+      Environment:
+        Variables:
+          CLUSTER_NAME:
+            Fn::ImportValue:
+              !Join [":", [!Ref "InfrastructureStackName", "ClusterName"]]
+          SERVICE_NAME: !Ref Service
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: nodejs12.x
+      Timeout: 5
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  ConfigSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !GetAtt UpdateServiceLambdaFunction.Arn
+      Protocol: lambda
+      TopicArn:
+        Fn::ImportValue: !Sub "${InfrastructureStackName}:BackendSettingsUpdatedTopicArn"
+
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref UpdateServiceLambdaFunction
+      Principal: sns.amazonaws.com
+      SourceArn:
+        Fn::ImportValue: !Sub "${InfrastructureStackName}:BackendSettingsUpdatedTopicArn"
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - ecs:UpdateService
+                Resource:
+                  - Fn::Sub:
+                      - arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${Service.Name}
+                      - ClusterName:
+                          Fn::ImportValue: !Sub "${InfrastructureStackName}:ClusterName"
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
