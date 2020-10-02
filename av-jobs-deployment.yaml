@@ -42,10 +42,10 @@ Parameters:
     Description: How many copies of the service task to run
   ApplicationTag:
     Type: String
-    Default: "Accurate Video"
+    Default: "accurate-video"
     Description: Used to tag all resources
     AllowedValues:
-      - "Accurate Video"
+      - "accurate-video"
   BlackFrameLocation:
     Type: String
     Default: "s3://av-black-frame-codemill/black25.mp4"
@@ -123,9 +123,6 @@ Resources:
   # container to run, and what resource requirements it has.
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
-    CreationPolicy:
-      ResourceSignal:
-        Timeout: PT10M
     Properties:
       Family: !Ref "ServiceName"
       Cpu: !Ref "ContainerCpu"
@@ -140,6 +137,17 @@ Resources:
           Cpu: !Ref "ContainerCpu"
           Memory: !Ref "ContainerMemory"
           Image: !Sub ${ImageRepoName}:${ImageTag}
+          # Command:
+          #   - !Sub
+          #     - |
+          #       apk add aws-cli; \
+          #       aws s3 cp s3://${ConfigBucketName}/backend/cluster.xml /opt/cluster.xml; \
+          #       java --add-modules java.se --add-exports java.base/jdk.internal.ref=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.management/sun.management=ALL-UNNAMED --add-opens jdk.management/com.sun.management.internal=ALL-UNNAMED  -Dvertx.hazelcast.config=/opt/cluster.xml -jar runner.jar;
+          #     - ConfigBucketName:
+          #         Fn::ImportValue: !Sub ${InfrastructureStackName}:ConfigBucketName
+          # EntryPoint:
+          #   - "sh"
+          #   - "-c"
           RepositoryCredentials:
             CredentialsParameter: !Ref "RegistryCredentials"
           PortMappings:
@@ -180,7 +188,7 @@ Resources:
               - !Ref AWS::NoValue
             - Name: AP_ADAPTER_URL_MP_REST_URL
               Value:
-                Fn::Sub:
+                !Sub
                   - "http://${AdapterServiceName}.av.local:8080"
                   - AdapterServiceName:
                       Fn::ImportValue: !Sub ${AdapterStackName}:DiscoveryServiceName
@@ -189,13 +197,13 @@ Resources:
           Secrets:
             - Name: AP_ADAPTER_USERNAME
               ValueFrom:
-                Fn::Sub:
+                !Sub
                   - "${AuthRunnerSecretArn}:username::"
                   - AuthRunnerSecretArn:
                       Fn::ImportValue: !Sub ${AdapterStackName}:AuthRunnerSecretArn
             - Name: AP_ADAPTER_PASSWORD
               ValueFrom:
-                Fn::Sub:
+                !Sub
                   - "${AuthRunnerSecretArn}:password::"
                   - AuthRunnerSecretArn:
                       Fn::ImportValue: !Sub ${AdapterStackName}:AuthRunnerSecretArn
@@ -220,29 +228,22 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  # Allow the ECS Tasks to use secrets from secretsmanager
-                  - "kms:Decrypt"
                   - "secretsmanager:GetSecretValue"
-                Resource: "*"
+                Resource: !Ref RegistryCredentials
               - Effect: Allow
                 Action:
-                  # Allow the ECS tasks to upload logs to CloudWatch
                   - "logs:CreateLogStream"
                   - "logs:PutLogEvents"
-                Resource: arn:aws:logs:*:*:*
+                Resource:
+                  - !Sub 
+                    - arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}:*
+                    - LogGroupName:
+                        Fn::ImportValue: !Sub ${InfrastructureStackName}:AVLogGroup
               - Effect: Allow
                 Action:
-                  - "s3:Describe*"
-                  - "s3:List*"
-                  - "s3:Read*"
-                  - "s3:HeadObject"
                   - "s3:GetObject"
                 Resource:
-                  - Fn::Sub:
-                      - arn:aws:s3:::${ConfigBucketName}
-                      - ConfigBucketName:
-                          Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
-                  - Fn::Sub:
+                  - !Sub
                       - arn:aws:s3:::${ConfigBucketName}/*
                       - ConfigBucketName:
                           Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
@@ -271,91 +272,6 @@ Resources:
             - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetOne
             - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetTwo
       TaskDefinition: !Ref "TaskDefinition"
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-
-
-  UpdateServiceLambdaFunction:
-    Type: "AWS::Lambda::Function"
-    Properties:
-      Code:
-        ZipFile: |
-          const AWS = require('aws-sdk');
-          const ecs = new AWS.ECS();
-          exports.handler = function(event, context, callback) {
-            var params = {
-              service: process.env.SERVICE_NAME, 
-              cluster: process.env.CLUSTER_NAME,
-              forceNewDeployment: true
-            };
-            ecs.updateService(params, function(err, data) {
-              if (err) console.log(err, err.stack); // an error occurred
-              else     console.log(data);           // successful response
-            });
-          };
-      Environment:
-        Variables:
-          CLUSTER_NAME:
-            Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
-          SERVICE_NAME: !Ref Service
-      Handler: index.handler
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Runtime: nodejs12.x
-      Timeout: 5
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-
-  ConfigSubscription:
-    Type: AWS::SNS::Subscription
-    Properties:
-      Endpoint: !GetAtt UpdateServiceLambdaFunction.Arn
-      Protocol: lambda
-      TopicArn:
-        Fn::ImportValue: !Sub "${InfrastructureStackName}:BackendSettingsUpdatedTopicArn"
-
-  LambdaPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Ref UpdateServiceLambdaFunction
-      Principal: sns.amazonaws.com
-      SourceArn:
-        Fn::ImportValue: !Sub "${InfrastructureStackName}:BackendSettingsUpdatedTopicArn"
-
-  LambdaExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - lambda.amazonaws.com
-            Action:
-              - sts:AssumeRole
-      Path: "/"
-      Policies:
-        - PolicyName: root
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: arn:aws:logs:*:*:*
-              - Effect: Allow
-                Action:
-                  - ecs:UpdateService
-                Resource:
-                  - Fn::Sub:
-                      - arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${Service.Name}
-                      - ClusterName:
-                          Fn::ImportValue: !Sub "${InfrastructureStackName}:ClusterName"
       Tags:
         - Key: application
           Value: !Ref ApplicationTag

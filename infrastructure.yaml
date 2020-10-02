@@ -32,10 +32,10 @@ Parameters:
     Description: Size of the database in GB
   ApplicationTag:
     Type: String
-    Default: "Accurate Video"
+    Default: "accurate-video"
     Description: Used to tag all resources
     AllowedValues:
-      - "Accurate Video"
+      - "accurate-video"
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -248,6 +248,23 @@ Resources:
       RouteTableId: !Ref PrivateRouteTableTwo
       SubnetId: !Ref PrivateSubnetTwo
 
+  VpcEndpointS3:
+    Type: AWS::EC2::VPCEndpoint
+    Properties: 
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: "*"
+            Principal: "*"
+            Resource: "*"
+      RouteTableIds: 
+        - !Ref PrivateRouteTableOne
+        - !Ref PrivateRouteTableTwo
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcEndpointType: Gateway
+      VpcId: !Ref VPC
+
   PrivateDNSNamespace:
     Type: AWS::ServiceDiscovery::PrivateDnsNamespace
     Properties:
@@ -286,16 +303,22 @@ Resources:
   DBInstance:
     Type: AWS::RDS::DBInstance
     Properties:
+      AllocatedStorage: !Ref "DBAllocatedStorage"
+      # BackupRetentionPeriod: 
+      DBInstanceClass: !Ref "DBClass"
       DBName: !Ref "DBName"
+      DBSubnetGroupName: !Ref "DBSubnetGroup"
+      DeletionProtection: true
       Engine: Postgres
       MasterUsername: !Sub '{{resolve:secretsmanager:${RDSInstanceSecret}::username}}'
       MasterUserPassword: !Sub '{{resolve:secretsmanager:${RDSInstanceSecret}::password}}'
-      DBInstanceClass: !Ref "DBClass"
-      AllocatedStorage: !Ref "DBAllocatedStorage"
+      # MaxAllocatedStorage: 
+      MultiAZ: true
+      # PreferredBackupWindow: hh24:mi-hh24:mi
+      # PreferredMaintenanceWindow: ddd:hh24:mi-ddd:hh24:mi
+      StorageEncrypted: true
       VPCSecurityGroups:
         - !GetAtt RdsDatabaseSG.GroupId
-      DBSubnetGroupName: !Ref "DBSubnetGroup"
-      StorageEncrypted: true
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -339,7 +362,7 @@ Resources:
       IpProtocol: "tcp"
       FromPort: 8080
       ToPort: 8080
-      SourceSecurityGroupId: !Ref "PublicLoadBalancerSG" #TODO: Validate this
+      SourceSecurityGroupId: !Ref "PublicLoadBalancerSG"
       GroupId: !Ref AvAdapterSG
 
   AdapterSgIngressJobs:
@@ -349,7 +372,7 @@ Resources:
       IpProtocol: "tcp"
       FromPort: 8080
       ToPort: 8080
-      SourceSecurityGroupId: !Ref "AvJobsSG" #TODO: Validate this
+      SourceSecurityGroupId: !Ref "AvJobsSG"
       GroupId: !Ref AvAdapterSG
 
   AvFrontendSG:
@@ -368,7 +391,7 @@ Resources:
       IpProtocol: "tcp"
       FromPort: 80
       ToPort: 80
-      SourceSecurityGroupId: !Ref "PublicLoadBalancerSG" #TODO: Validate this
+      SourceSecurityGroupId: !Ref "PublicLoadBalancerSG"
       GroupId: !Ref AvFrontendSG
   
   AvAnalyzeSG:
@@ -387,7 +410,7 @@ Resources:
       IpProtocol: "tcp"
       FromPort: 8080
       ToPort: 8080
-      SourceSecurityGroupId: !Ref "PublicLoadBalancerSG" #TODO: Validate this
+      SourceSecurityGroupId: !Ref "PublicLoadBalancerSG"
       GroupId: !Ref AvAnalyzeSG
 
   AvJobsSG:
@@ -420,7 +443,6 @@ Resources:
       GroupDescription: Access to the public facing load balancer
       VpcId: !Ref "VPC"
       SecurityGroupIngress:
-        # Allow access to ALB from anywhere on the internet
         - CidrIp: 0.0.0.0/0
           IpProtocol: "tcp"
           FromPort: 80
@@ -490,13 +512,6 @@ Resources:
                     - Name: prefix
                       Value: frontend
             Topic: !Ref FrontendSettingsUpdatedTopic
-          - Event: s3:ObjectCreated:*
-            Filter: 
-                S3Key: 
-                  Rules: 
-                    - Name: prefix
-                      Value: backend
-            Topic: !Ref BackendSettingsUpdatedTopic
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -509,31 +524,6 @@ Resources:
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
-
-  BackendSettingsUpdatedTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-
-  BackendSettingsUpdatedTopicPolicy:
-    Type: AWS::SNS::TopicPolicy
-    Properties: 
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal: 
-              Service: s3.amazonaws.com
-            Resource: 
-              - !Ref BackendSettingsUpdatedTopic
-            Action: sns:Publish
-            Condition:
-              StringEquals:
-                AWS:SourceAccount: !Ref AWS::AccountId
-      Topics: 
-        - !Ref BackendSettingsUpdatedTopic
 
   FrontendSettingsUpdatedTopicPolicy:
     Type: AWS::SNS::TopicPolicy
@@ -562,11 +552,6 @@ Outputs:
     Value: !Ref "ConfigBucket"
     Export:
       Name: !Sub ${AWS::StackName}:ConfigBucketName
-  BackendSettingsUpdatedTopicArn:
-    Description: The SNS topic notified when backend configuration files have changed
-    Value: !Ref "BackendSettingsUpdatedTopic"
-    Export:
-      Name: !Sub ${AWS::StackName}:BackendSettingsUpdatedTopicArn
   FrontendSettingsUpdatedTopicArn:
     Description: The SNS topic notified when frontend configuration files have changed
     Value: !Ref "FrontendSettingsUpdatedTopic"

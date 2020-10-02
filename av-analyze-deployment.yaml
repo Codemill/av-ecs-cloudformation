@@ -49,9 +49,9 @@ Parameters:
     Description: How many copies of the service task to run
   ApplicationTag:
     Type: String
-    Default: "Accurate Video"
+    Default: "accurate-video"
     AllowedValues:
-      - "Accurate Video"
+      - "accurate-video"
 
   ApAnalyzeCacheDays:
     Type: String
@@ -104,9 +104,6 @@ Metadata:
 Resources:
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
-    CreationPolicy:
-      ResourceSignal:
-        Timeout: PT10M
     Properties:
       Family: !Ref "ServiceName"
       Cpu: !Ref "ContainerCpu"
@@ -171,29 +168,22 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  # Allow the ECS Tasks to use secrets from secretsmanager
-                  - "kms:Decrypt"
                   - "secretsmanager:GetSecretValue"
-                Resource: "*"
+                Resource: !Ref RegistryCredentials
               - Effect: Allow
                 Action:
-                  # Allow the ECS tasks to upload logs to CloudWatch
                   - "logs:CreateLogStream"
                   - "logs:PutLogEvents"
-                Resource: arn:aws:logs:*:*:*
+                Resource:
+                  - !Sub 
+                    - arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}:*
+                    - LogGroupName:
+                        Fn::ImportValue: !Sub ${InfrastructureStackName}:AVLogGroup
               - Effect: Allow
                 Action:
-                  - "s3:Describe*"
-                  - "s3:List*"
-                  - "s3:Read*"
-                  - "s3:HeadObject"
                   - "s3:GetObject"
                 Resource:
-                  - Fn::Sub:
-                      - arn:aws:s3:::${ConfigBucketName}
-                      - ConfigBucketName:
-                          Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
-                  - Fn::Sub:
+                  - !Sub
                       - arn:aws:s3:::${ConfigBucketName}/*
                       - ConfigBucketName:
                           Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
@@ -230,9 +220,6 @@ Resources:
   Service:
     Type: AWS::ECS::Service
     DependsOn: LoadBalancerRule
-    CreationPolicy:
-      ResourceSignal:
-        Timeout: PT10M
     Properties:
       Cluster:
         Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
@@ -243,7 +230,6 @@ Resources:
       DesiredCount: !Ref "DesiredCount"
       NetworkConfiguration:
         AwsvpcConfiguration:
-          AssignPublicIp: ENABLED
           SecurityGroups:
             - Fn::ImportValue: !Sub ${InfrastructureStackName}:AvAnalyzeSG
           Subnets:
@@ -269,7 +255,7 @@ Resources:
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      HealthCheckIntervalSeconds: 150
+      HealthCheckIntervalSeconds: 60
       HealthCheckPath: /api/analyze/audio/async
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 120
