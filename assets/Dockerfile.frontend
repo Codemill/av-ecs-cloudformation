@@ -1,3 +1,0 @@
-FROM codemill-docker.jfrog.io/accurate-player/accurate-player-qc:v4.0.2
-
-COPY ./assets/frontend/* /usr/share/nginx/html/assets/json/

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<hazelcast xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:schemaLocation="http://www.hazelcast.com/schema/config hazelcast-config-3.8.xsd"
+           xmlns="http://www.hazelcast.com/schema/config">
+
+	<import resource="hazelcast-common.xml"/>
+
+	<properties>
+		<property name="hazelcast.discovery.enabled">true</property>
+	</properties>
+
+	<network>
+		<interfaces enabled="true">
+			<!-- must correspond to vpc range -->
+			<interface>10.10.*.*</interface>
+		</interfaces>
+		<port auto-increment="true">5701</port>
+		<join>
+			<discovery-strategies>
+				<discovery-strategy enabled="true" class="se.codemill.hazelcast.AwsEcsDiscoveryStrategy">
+					<properties>
+						<property name="cluster"></property>
+						<property name="service"></property>
+
+						<!-- these are used if either cluster or service is blank -->
+						<property name="cluster-name-regexp">av-cluster</property>
+						<property name="service-name-regexp">av-.+-Service-.+</property>
+
+						<!-- below are optional, prefer using a ecs task role with right policy/permission-->
+						<!-- <property name="ports">5701-5702</property>
+						<property name="container-name-regexp">.*</property>
+						<property name="access-key"></property>
+						<property name="secret-key"></property>
+						<property name="region">eu-north-1</property>
+						<property name="fail-fast">true</property> -->
+					</properties>
+				</discovery-strategy>
+			</discovery-strategies>
+			<aws enabled="false"/>
+			<multicast enabled="false"/>
+			<tcp-ip enabled="false"/>
+		</join>
+	</network>
+</hazelcast>

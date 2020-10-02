@@ -1,15 +1,23 @@
 export default {
   backendUrl: "/api",
-  licenseKey:
-    "<licencense-key>",
+  eventBusUrl: "/api/eventbus",
+  licenseKey: "AV_LICENSE_KEY",
+  endFrameInclusive: true,
   showThemeSelect: false,
   showAssetView: true,
+  preferredVideoShapes: ["mp4", "original"],
   timeline: {
     waveforms: {
       active: "analyze",
       analyze: {
-        url: "/api/analyze/",
+        url: "/api/analyze",
       }
+    }
+  },
+  qc: {
+    features: {
+      markers: false,
+      assetStatus: false
     }
   },
   audioQc: {

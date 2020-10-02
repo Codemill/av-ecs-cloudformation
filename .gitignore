@@ -1,10 +1,14 @@
+# misc
 .DS_Store
 .idea
 *.log
 tmp/
 
+# frontend
 settings.js
 keycloak.json
+
+# backend
 cluster.xml
 prod-users.properties
 prod-roles.properties
