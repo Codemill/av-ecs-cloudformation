@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 
-read -p 'AWS Region (required): ' REGION
-read -p 'AWS Profile [default]: ' PROFILE
-read -p 'Infrastructure stack name [av-ecs]: ' INFRASTRUCTURE_STACK_NAME
-read -p 'Cluster name [av-cluster]: ' CLUSTER_NAME
-read -p 'Image registry credentials (required): ' REGISTRY_CREDENTIALS
-read -p 'Database name [accurateVideo]: ' DATABASE_NAME
-read -p 'Database user [postgres]: ' DATABASE_USER
-read -p 'Database class [db.t3.small]: ' DATABASE_CLASS
-read -p 'Database size in GB [5]: ' DATABASE_ALLOCATED_STORAGE
+read -rp "AWS Region (required): " REGION
+read -rp "AWS Profile [default]: " PROFILE
+read -rp "Infrastructure stack name [av-ecs]: " INFRASTRUCTURE_STACK_NAME
+read -rp "Cluster name [av-cluster]: " CLUSTER_NAME
+read -rp "Image registry credentials (required): " REGISTRY_CREDENTIALS
+read -rp "Database name [accurateVideo]: " DATABASE_NAME
+read -rp "Database user [postgres]: " DATABASE_USER
+read -rp "Database class [db.t3.small]: " DATABASE_CLASS
+read -rp "Database size in GB [5]: " DATABASE_ALLOCATED_STORAGE
 
 PROFILE=${PROFILE:-default}
 INFRASTRUCTURE_STACK_NAME=${INFRASTRUCTURE_STACK_NAME:-av-ecs}
@@ -19,17 +19,17 @@ DATABASE_CLASS=${DATABASE_CLASS:-db.t3.small}
 DATABASE_ALLOCATED_STORAGE=${DATABASE_ALLOCATED_STORAGE:-5}
 
 if [ -z "${REGION}" ]; then
-  printf 'ERR: Missing region\n' >&2
+  printf "ERR: Missing region\n" >&2
   exit 1
 fi
 
 if [ -z "${REGISTRY_CREDENTIALS}" ]; then
-  printf 'ERR: Missing registry credentials\n' >&2
+  printf "ERR: Missing registry credentials\n" >&2
   exit 1
 fi
 
-printf 'Creating Infrastructure stack...\n'
-aws cloudformation create-stack \
+printf "Creating Infrastructure stack...\n"
+echo aws cloudformation create-stack \
   --template-body file://./infrastructure.yaml \
   --stack-name "${INFRASTRUCTURE_STACK_NAME}" \
   --parameters \
@@ -42,15 +42,15 @@ aws cloudformation create-stack \
   --region "${REGION}" \
   --profile "${PROFILE}"
 
-printf 'Waiting for Infrastructure to complete...\n'
+printf "Waiting for Infrastructure to complete...\n"
 aws cloudformation wait stack-create-complete \
     --stack-name "${INFRASTRUCTURE_STACK_NAME}" \
     --region "${REGION}" \
     --profile "${PROFILE}"
 
 INFRASTRUCTURE_CREATE_CODE=$?
-if [ $INFRASTRUCTURE_CREATE_CODE != 0 ]; then
-  printf 'ERR: Failed waiting for stack %s to complete: %s\n' "${INFRASTRUCTURE_STACK_NAME}" "${INFRASTRUCTURE_CREATE_CODE}" >&2
+if [ "${INFRASTRUCTURE_CREATE_CODE}" != 0 ]; then
+  printf "ERR: Failed waiting for stack %s to complete: %s\n" "${INFRASTRUCTURE_STACK_NAME}" "${INFRASTRUCTURE_CREATE_CODE}" >&2
   exit 1
 fi
 
@@ -61,10 +61,7 @@ CONFIG_BUCKET=$(aws cloudformation describe-stacks \
     --region "${REGION}" \
     --profile "${PROFILE}")
 
-aws s3 cp --recursive ./config/frontend "s3://${CONFIG_BUCKET}/frontend" --profile "${PROFILE}"
-aws s3 cp --recursive ./config/backend "s3://${CONFIG_BUCKET}/backend" --profile "${PROFILE}"
-
-printf 'Creating ${INFRASTRUCTURE_STACK_NAME}-adapter stack...\n'
+printf "Creating %s stack...\n" "${INFRASTRUCTURE_STACK_NAME}-adapter"
 aws cloudformation create-stack \
   --template-body file://./av-adapter-deployment.yaml \
   --stack-name "${INFRASTRUCTURE_STACK_NAME}-adapter" \
@@ -79,7 +76,7 @@ aws cloudformation create-stack \
   --capabilities CAPABILITY_IAM \
   --region "${REGION}" \
   --profile "${PROFILE}"
-printf 'Creating ${INFRASTRUCTURE_STACK_NAME}-frontend stack...\n'
+printf "Creating %s stack...\n" "${INFRASTRUCTURE_STACK_NAME}-frontend"
 aws cloudformation create-stack \
   --template-body file://./av-frontend-deployment.yaml \
   --stack-name "${INFRASTRUCTURE_STACK_NAME}-frontend" \
@@ -94,7 +91,7 @@ aws cloudformation create-stack \
   --region "${REGION}" \
   --profile "${PROFILE}"
 
-printf 'Creating ${INFRASTRUCTURE_STACK_NAME}-analyze stack...\n'
+printf "Creating %s stack...\n" "${INFRASTRUCTURE_STACK_NAME}-analyze"
 aws cloudformation create-stack \
   --template-body file://./av-analyze-deployment.yaml \
   --stack-name "${INFRASTRUCTURE_STACK_NAME}-analyze" \
@@ -106,19 +103,19 @@ aws cloudformation create-stack \
   --region "${REGION}" \
   --profile "${PROFILE}"
 
-printf 'Waiting for ${INFRASTRUCTURE_STACK_NAME}-adapter to complete...\n'
+printf "Waiting for %s to complete...\n" "${INFRASTRUCTURE_STACK_NAME}-adapter"
 aws cloudformation wait stack-create-complete \
     --stack-name "${INFRASTRUCTURE_STACK_NAME}-adapter" \
     --region "${REGION}" \
     --profile "${PROFILE}"
 
 ADAPTER_CREATE_CODE=$?
-if [ $ADAPTER_CREATE_CODE != "0" ]; then
-  printf 'ERR: Failed waiting for stack %s to complete: %s\n' "${INFRASTRUCTURE_STACK_NAME}" "${ADAPTER_CREATE_CODE}" >&2
+if [ "${ADAPTER_CREATE_CODE}" != "0" ]; then
+  printf "ERR: Failed waiting for stack %s to complete: %s\n" "${INFRASTRUCTURE_STACK_NAME}" "${ADAPTER_CREATE_CODE}" >&2
   exit 1
 fi
 
-printf 'Creating ${INFRASTRUCTURE_STACK_NAME}-jobs stack...\n'
+printf "Creating %s stack...\n" "${INFRASTRUCTURE_STACK_NAME}-jobs"
 aws cloudformation create-stack \
   --template-body file://./av-jobs-deployment.yaml \
   --stack-name "${INFRASTRUCTURE_STACK_NAME}-jobs" \
@@ -131,10 +128,10 @@ aws cloudformation create-stack \
   --region "${REGION}" \
   --profile "${PROFILE}"
 
-printf 'Waiting for ${INFRASTRUCTURE_STACK_NAME}-jobs to complete...\n'
+printf "Waiting for %s to complete...\n" "${INFRASTRUCTURE_STACK_NAME}-jobs"
 aws cloudformation wait stack-create-complete \
     --stack-name "${INFRASTRUCTURE_STACK_NAME}-jobs" \
     --region "${REGION}" \
     --profile "${PROFILE}"
 
-printf 'Done!'
+printf "Done!\n"
