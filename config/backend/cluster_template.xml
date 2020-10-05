@@ -12,7 +12,7 @@
 	<network>
 		<interfaces enabled="true">
 			<!-- must correspond to vpc range -->
-			<interface>10.10.*.*</interface>
+			<interface>10.0.2.*</interface>
 		</interfaces>
 		<port auto-increment="true">5701</port>
 		<join>
