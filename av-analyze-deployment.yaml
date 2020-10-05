@@ -255,10 +255,10 @@ Resources:
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
-      HealthCheckIntervalSeconds: 60
+      HealthCheckIntervalSeconds: 120
       HealthCheckPath: /api/analyze/audio/async
       HealthCheckProtocol: HTTP
-      HealthCheckTimeoutSeconds: 120
+      HealthCheckTimeoutSeconds: 60
       HealthyThresholdCount: 2
       TargetGroupAttributes:
         - Key: deregistration_delay.timeout_seconds

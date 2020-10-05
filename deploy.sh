@@ -49,17 +49,17 @@ aws cloudformation wait stack-create-complete \
     --profile "${PROFILE}"
 
 INFRASTRUCTURE_CREATE_CODE=$?
-if [ INFRASTRUCTURE_CREATE_CODE != "0" ]; then
+if [ $INFRASTRUCTURE_CREATE_CODE != 0 ]; then
   printf 'ERR: Failed waiting for stack %s to complete: %s\n' "${INFRASTRUCTURE_STACK_NAME}" "${INFRASTRUCTURE_CREATE_CODE}" >&2
   exit 1
 fi
 
-CONFIG_BUCKET=aws cloudformation describe-stacks \
+CONFIG_BUCKET=$(aws cloudformation describe-stacks \
     --stack-name "${INFRASTRUCTURE_STACK_NAME}" \
     --query "Stacks[0].Outputs[?OutputKey=='ConfigBucketName'].OutputValue" \
     --output text \
     --region "${REGION}" \
-    --profile "${PROFILE}"
+    --profile "${PROFILE}")
 
 aws s3 cp --recursive ./config/frontend "s3://${CONFIG_BUCKET}/frontend" --profile "${PROFILE}"
 aws s3 cp --recursive ./config/backend "s3://${CONFIG_BUCKET}/backend" --profile "${PROFILE}"
@@ -70,16 +70,29 @@ aws cloudformation create-stack \
   --stack-name "${INFRASTRUCTURE_STACK_NAME}-adapter" \
   --parameters \
     ParameterKey=InfrastructureStackName,ParameterValue="${INFRASTRUCTURE_STACK_NAME}" \
+    ParameterKey=DBName,ParameterValue="${DATABASE_NAME}" \
+    ParameterKey=ImageTag,ParameterValue="4.2.1" \
+    ParameterKey=ContainerCpu,ParameterValue="256" \
+    ParameterKey=ContainerMemory,ParameterValue="1024" \
+    ParameterKey=DesiredCount,ParameterValue="2" \
     ParameterKey=RegistryCredentials,ParameterValue="${REGISTRY_CREDENTIALS}" \
-    ParameterKey=DBName,ParameterValue="${DATABASE_NAME}"
-
+  --capabilities CAPABILITY_IAM \
+  --region "${REGION}" \
+  --profile "${PROFILE}"
 printf 'Creating ${INFRASTRUCTURE_STACK_NAME}-frontend stack...\n'
 aws cloudformation create-stack \
   --template-body file://./av-frontend-deployment.yaml \
   --stack-name "${INFRASTRUCTURE_STACK_NAME}-frontend" \
   --parameters \
     ParameterKey=InfrastructureStackName,ParameterValue="${INFRASTRUCTURE_STACK_NAME}" \
+    ParameterKey=ImageTag,ParameterValue="v4.2.2-rc.0" \
+    ParameterKey=ContainerCpu,ParameterValue="256" \
+    ParameterKey=ContainerMemory,ParameterValue="512" \
+    ParameterKey=DesiredCount,ParameterValue="2" \
     ParameterKey=RegistryCredentials,ParameterValue="${REGISTRY_CREDENTIALS}" \
+  --capabilities CAPABILITY_IAM \
+  --region "${REGION}" \
+  --profile "${PROFILE}"
 
 printf 'Creating ${INFRASTRUCTURE_STACK_NAME}-analyze stack...\n'
 aws cloudformation create-stack \
@@ -87,7 +100,11 @@ aws cloudformation create-stack \
   --stack-name "${INFRASTRUCTURE_STACK_NAME}-analyze" \
   --parameters \
     ParameterKey=InfrastructureStackName,ParameterValue="${INFRASTRUCTURE_STACK_NAME}" \
-    ParameterKey=RegistryCredentials,ParameterValue="${REGISTRY_CREDENTIALS}"
+    ParameterKey=ImageTag,ParameterValue="1.2.1" \
+    ParameterKey=RegistryCredentials,ParameterValue="${REGISTRY_CREDENTIALS}" \
+  --capabilities CAPABILITY_IAM \
+  --region "${REGION}" \
+  --profile "${PROFILE}"
 
 printf 'Waiting for ${INFRASTRUCTURE_STACK_NAME}-adapter to complete...\n'
 aws cloudformation wait stack-create-complete \
@@ -96,15 +113,28 @@ aws cloudformation wait stack-create-complete \
     --profile "${PROFILE}"
 
 ADAPTER_CREATE_CODE=$?
-if [ ADAPTER_CREATE_CODE != "0" ]; then
+if [ $ADAPTER_CREATE_CODE != "0" ]; then
   printf 'ERR: Failed waiting for stack %s to complete: %s\n' "${INFRASTRUCTURE_STACK_NAME}" "${ADAPTER_CREATE_CODE}" >&2
   exit 1
 fi
 
+printf 'Creating ${INFRASTRUCTURE_STACK_NAME}-jobs stack...\n'
 aws cloudformation create-stack \
   --template-body file://./av-jobs-deployment.yaml \
   --stack-name "${INFRASTRUCTURE_STACK_NAME}-jobs" \
   --parameters \
     ParameterKey=InfrastructureStackName,ParameterValue="${INFRASTRUCTURE_STACK_NAME}" \
     ParameterKey=AdapterStackName,ParameterValue="${INFRASTRUCTURE_STACK_NAME}-adapter" \
-    ParameterKey=RegistryCredentials,ParameterValue="${REGISTRY_CREDENTIALS}"
+    ParameterKey=ImageTag,ParameterValue="4.2.1" \
+    ParameterKey=RegistryCredentials,ParameterValue="${REGISTRY_CREDENTIALS}" \
+  --capabilities CAPABILITY_IAM \
+  --region "${REGION}" \
+  --profile "${PROFILE}"
+
+printf 'Waiting for ${INFRASTRUCTURE_STACK_NAME}-jobs to complete...\n'
+aws cloudformation wait stack-create-complete \
+    --stack-name "${INFRASTRUCTURE_STACK_NAME}-jobs" \
+    --region "${REGION}" \
+    --profile "${PROFILE}"
+
+printf 'Done!'

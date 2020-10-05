@@ -72,9 +72,11 @@ Parameters:
     Description: Audio extraction template ID
   AwsRole:
     Type: String
+    Default: ""
     Description: IAM role that Elemental can use to access different media locations
   ElementalQueue:
     Type: String
+    Default: ""
     Description: Will use default queue if not configured
 
 Metadata:
@@ -229,7 +231,9 @@ Resources:
               - Effect: Allow
                 Action:
                   - "secretsmanager:GetSecretValue"
-                Resource: !Ref RegistryCredentials
+                Resource: 
+                  - !Ref RegistryCredentials
+                  - Fn::ImportValue: !Sub ${AdapterStackName}:AuthRunnerSecretArn
               - Effect: Allow
                 Action:
                   - "logs:CreateLogStream"
