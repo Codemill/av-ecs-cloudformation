@@ -20,6 +20,8 @@ Before uploading each configuration file, you need to remove the `_template` suf
 
 After you've renamed and updated the configuration files you'll need to upload them to the configuration bucket that was created by the infrastructure template.
 
+If you're manually applying each template and not using `deploy.sh` you also need to upload the files to the configuration bucket:
+
 ```sh
 aws s3 cp --recursive ./config/frontend s3://${CONFIG_BUCKET}/frontend
 aws s3 cp --recursive ./config/backend s3://${CONFIG_BUCKET}/backend
