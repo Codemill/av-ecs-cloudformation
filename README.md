@@ -23,8 +23,8 @@ After you've renamed and updated the configuration files you'll need to upload t
 If you're manually applying each template and not using `deploy.sh` you also need to upload the files to the configuration bucket:
 
 ```sh
-aws s3 cp --recursive ./config/frontend s3://${CONFIG_BUCKET}/frontend
-aws s3 cp --recursive ./config/backend s3://${CONFIG_BUCKET}/backend
+aws s3 cp --recursive ./config/frontend s3://${CONFIG_BUCKET}/frontend --profile codemill
+aws s3 cp --recursive ./config/backend s3://${CONFIG_BUCKET}/backend --profile codemill
 ```
 
 ### Create ECS cluster running Accurate Video
@@ -37,10 +37,19 @@ You can either manually upload the templates to Cloud Formation or use our inter
 
 ## Architecture
 
-#### VPC
+### VPC
+The VPC is set up with two public and two private subnets spanning two availability zones for high availability. Resources placed in the public subnets can be assigned public IP addresses, while the ones in the private subnets can not and they are only accessible from within the VPC. 
+
+All traffic to and from the internet passes through the Internet Gateway. Access to the internet from the private subnets is done via NAT Gateways placed in both public subnets.
+Traffic with an S3 bucket as destination will not be routed over the public internet, but instead via an S3 Gateway Endpoint directly over the AWS backbone network.
+
 ![alt text](documentation/network.png)
 
-#### Security Groups
+### Security Groups
+Security groups are in place to restrict network access to the different resources. The only one that allows direct access from the internet is the public Application Load Balancer (ALB), and this is restricted to TCP traffic on port 80 as we are currently running HTTP.
+
+The Frontend, Analyze and Adapter services allow TCP traffic coming from the public ALB to their respective ports, the Adapter service also allows TCP traffic coming directly from the Jobs service. The RDS database only allows TCP traffic on port 5432 (PostgreSQL) coming from the Adapter service.
+
 ![alt text](documentation/security-groups.png)
 
 ### Services

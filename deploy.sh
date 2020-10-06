@@ -18,6 +18,27 @@ DATABASE_USER=${DATABASE_USER:-postgres}
 DATABASE_CLASS=${DATABASE_CLASS:-db.t3.small}
 DATABASE_ALLOCATED_STORAGE=${DATABASE_ALLOCATED_STORAGE:-5}
 
+ADAPTER_IMAGE_TAG="4.2.1"
+ANALYZE_IMAGE_TAG="1.2.1"
+FRONTEND_IMAGE_TAG="v4.2.2-rc.0"
+JOBS_IMAGE_TAG="4.2.1"
+
+ADAPTER_CONTAINER_CPU="256"
+ANALYZE_CONTAINER_CPU="256"
+FRONTEND_CONTAINER_CPU="256"
+JOBS_CONTAINER_CPU="512"
+
+ADAPTER_CONTAINER_MEMORY="1024"
+ANALYZE_CONTAINER_MEMORY="512"
+FRONTEND_CONTAINER_MEMORY="512"
+JOBS_CONTAINER_MEMORY="1024"
+
+ADAPTER_CONTAINER_DESIRED_COUNT="2"
+ANALYZE_CONTAINER_DESIRED_COUNT="2"
+FRONTEND_CONTAINER_DESIRED_COUNT="2"
+JOBS_CONTAINER_DESIRED_COUNT="2"
+
+
 if [ -z "${REGION}" ]; then
   printf "ERR: Missing region\n" >&2
   exit 1
@@ -68,10 +89,10 @@ aws cloudformation create-stack \
   --parameters \
     ParameterKey=InfrastructureStackName,ParameterValue="${INFRASTRUCTURE_STACK_NAME}" \
     ParameterKey=DBName,ParameterValue="${DATABASE_NAME}" \
-    ParameterKey=ImageTag,ParameterValue="4.2.1" \
-    ParameterKey=ContainerCpu,ParameterValue="256" \
-    ParameterKey=ContainerMemory,ParameterValue="1024" \
-    ParameterKey=DesiredCount,ParameterValue="2" \
+    ParameterKey=ImageTag,ParameterValue="${ADAPTER_IMAGE_TAG}" \
+    ParameterKey=ContainerCpu,ParameterValue="${ADAPTER_CONTAINER_CPU}" \
+    ParameterKey=ContainerMemory,ParameterValue="${ADAPTER_CONTAINER_MEMORY}" \
+    ParameterKey=DesiredCount,ParameterValue="${ADAPTER_DESIRED_COUNT}" \
     ParameterKey=RegistryCredentials,ParameterValue="${REGISTRY_CREDENTIALS}" \
   --capabilities CAPABILITY_IAM \
   --region "${REGION}" \
@@ -82,10 +103,10 @@ aws cloudformation create-stack \
   --stack-name "${INFRASTRUCTURE_STACK_NAME}-frontend" \
   --parameters \
     ParameterKey=InfrastructureStackName,ParameterValue="${INFRASTRUCTURE_STACK_NAME}" \
-    ParameterKey=ImageTag,ParameterValue="v4.2.2-rc.0" \
-    ParameterKey=ContainerCpu,ParameterValue="256" \
-    ParameterKey=ContainerMemory,ParameterValue="512" \
-    ParameterKey=DesiredCount,ParameterValue="2" \
+    ParameterKey=ImageTag,ParameterValue="${FRONTEND_IMAGE_TAG}" \
+    ParameterKey=ContainerCpu,ParameterValue="${FRONTEND_CONTAINER_CPU}" \
+    ParameterKey=ContainerMemory,ParameterValue="${FRONTEND_CONTAINER_MEMORY}" \
+    ParameterKey=DesiredCount,ParameterValue="${FRONTEND_DESIRED_COUNT}" \
     ParameterKey=RegistryCredentials,ParameterValue="${REGISTRY_CREDENTIALS}" \
   --capabilities CAPABILITY_IAM \
   --region "${REGION}" \
@@ -97,7 +118,10 @@ aws cloudformation create-stack \
   --stack-name "${INFRASTRUCTURE_STACK_NAME}-analyze" \
   --parameters \
     ParameterKey=InfrastructureStackName,ParameterValue="${INFRASTRUCTURE_STACK_NAME}" \
-    ParameterKey=ImageTag,ParameterValue="1.2.1" \
+    ParameterKey=ImageTag,ParameterValue="${ANALYZE_IMAGE_TAG}" \
+    ParameterKey=ContainerCpu,ParameterValue="${ANALYZE_CONTAINER_CPU}" \
+    ParameterKey=ContainerMemory,ParameterValue="${ANALYZE_CONTAINER_MEMORY}" \
+    ParameterKey=DesiredCount,ParameterValue="${ANALYZE_DESIRED_COUNT}" \
     ParameterKey=RegistryCredentials,ParameterValue="${REGISTRY_CREDENTIALS}" \
   --capabilities CAPABILITY_IAM \
   --region "${REGION}" \
@@ -122,7 +146,10 @@ aws cloudformation create-stack \
   --parameters \
     ParameterKey=InfrastructureStackName,ParameterValue="${INFRASTRUCTURE_STACK_NAME}" \
     ParameterKey=AdapterStackName,ParameterValue="${INFRASTRUCTURE_STACK_NAME}-adapter" \
-    ParameterKey=ImageTag,ParameterValue="4.2.1" \
+    ParameterKey=ImageTag,ParameterValue="${JOBS_IMAGE_TAG}" \
+    ParameterKey=ContainerCpu,ParameterValue="${JOBS_CONTAINER_CPU}" \
+    ParameterKey=ContainerMemory,ParameterValue="${JOBS_CONTAINER_MEMORY}" \
+    ParameterKey=DesiredCount,ParameterValue="${JOBS_DESIRED_COUNT}" \
     ParameterKey=RegistryCredentials,ParameterValue="${REGISTRY_CREDENTIALS}" \
   --capabilities CAPABILITY_IAM \
   --region "${REGION}" \
