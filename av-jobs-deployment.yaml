@@ -22,7 +22,7 @@ Parameters:
     Description: The docker image repo to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.2.1
+    Default: 4.3.0-rc1
     Description: The docker image tag to use for image deployment
   RegistryCredentials:
     Type: String
@@ -139,17 +139,6 @@ Resources:
           Cpu: !Ref "ContainerCpu"
           Memory: !Ref "ContainerMemory"
           Image: !Sub ${ImageRepoName}:${ImageTag}
-          # Command:
-          #   - !Sub
-          #     - |
-          #       apk add aws-cli; \
-          #       aws s3 cp s3://${ConfigBucketName}/backend/cluster.xml /opt/cluster.xml; \
-          #       java --add-modules java.se --add-exports java.base/jdk.internal.ref=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.management/sun.management=ALL-UNNAMED --add-opens jdk.management/com.sun.management.internal=ALL-UNNAMED  -Dvertx.hazelcast.config=/opt/cluster.xml -jar runner.jar;
-          #     - ConfigBucketName:
-          #         Fn::ImportValue: !Sub ${InfrastructureStackName}:ConfigBucketName
-          # EntryPoint:
-          #   - "sh"
-          #   - "-c"
           RepositoryCredentials:
             CredentialsParameter: !Ref "RegistryCredentials"
           PortMappings:
@@ -196,6 +185,12 @@ Resources:
                       Fn::ImportValue: !Sub ${AdapterStackName}:DiscoveryServiceName
             - Name: AV_RUNNER_BINDIR
               Value: /usr/local/bin
+            - Name: CLUSTER_XML
+              Value: "/opt/ecs-cluster.xml"
+            - NAME: CLUSTER_NAME_REGEXP
+              Value:
+            - Name: SERVICE_NAME_REGEXP
+              Value:
           Secrets:
             - Name: AP_ADAPTER_USERNAME
               ValueFrom:
@@ -231,7 +226,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - "secretsmanager:GetSecretValue"
-                Resource: 
+                Resource:
                   - !Ref RegistryCredentials
                   - Fn::ImportValue: !Sub ${AdapterStackName}:AuthRunnerSecretArn
               - Effect: Allow
@@ -239,7 +234,7 @@ Resources:
                   - "logs:CreateLogStream"
                   - "logs:PutLogEvents"
                 Resource:
-                  - !Sub 
+                  - !Sub
                     - arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}:*
                     - LogGroupName:
                         Fn::ImportValue: !Sub ${InfrastructureStackName}:AVLogGroup

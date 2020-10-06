@@ -21,7 +21,7 @@ Parameters:
     Description: The ecr repo and tag to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.2.1
+    Default: 4.3.0-rc1
     Description: The ecr repo and tag to use for image deployment
   ContainerCpu:
     Type: Number
@@ -112,17 +112,6 @@ Resources:
           Cpu: !Ref "ContainerCpu"
           Memory: !Ref "ContainerMemory"
           Image: !Sub ${ImageRepoName}:${ImageTag}
-          # Command:
-          #   - !Sub
-          #     - |
-          #       apk add aws-cli; \
-          #       aws s3 cp s3://${ConfigBucketName}/backend/cluster.xml /opt/cluster.xml; \
-          #       java --add-modules java.se --add-exports java.base/jdk.internal.ref=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.management/sun.management=ALL-UNNAMED --add-opens jdk.management/com.sun.management.internal=ALL-UNNAMED  -Dvertx.hazelcast.config=/opt/cluster.xml -jar runner.jar;
-          #     - ConfigBucketName:
-          #         Fn::ImportValue: !Sub ${InfrastructureStackName}:ConfigBucketName
-          # EntryPoint:
-          #   - "sh"
-          #   - "-c"
           PortMappings:
             - ContainerPort: 8080
             - ContainerPort: 5700
@@ -184,6 +173,12 @@ Resources:
               Value: !Sub ${ServiceName}.av.local
             - Name: HTTP_PATH_PREFIX
               Value: "/api"
+            - Name: CLUSTER_XML
+              Value: "/opt/ecs-cluster.xml"
+            - NAME: CLUSTER_NAME_REGEXP
+              Value:
+            - Name: SERVICE_NAME_REGEXP
+              Value:
           Secrets:
             - Name: QUARKUS_DATASOURCE_USERNAME
               ValueFrom: !Sub
@@ -221,7 +216,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - "secretsmanager:GetSecretValue"
-                Resource: 
+                Resource:
                   - !Ref RegistryCredentials
                   - Fn::ImportValue: !Sub ${InfrastructureStackName}:RDSInstanceSecretArn
                   - !Ref AuthRunnerSecret
