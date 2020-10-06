@@ -56,4 +56,6 @@ The Frontend, Analyze and Adapter services allow TCP traffic coming from the pub
 ![alt text](documentation/services.png)
 
 ### Auto-deployment of settings file
+It is possible to change the Frontend configuration by updating the configuration file in S3. When this file is changed, S3 will send a notification event to an SNS Topic, which in turn will notify a Lambda function that initiates a new deployment of the Frontend service with the latest configuration. The deployment will launch new tasks in Fargate, wait for them to be healthy and then terminate the old tasks.
+
 ![alt text](documentation/autodeploy-settings-file.png)
