@@ -192,10 +192,7 @@ Resources:
                 - ClusterName:
                     Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
             - Name: SERVICE_NAME_REGEXP
-              Value: !Sub
-                - "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${ClusterName}-(adapter-jobs)"
-                - ClusterName:
-                    Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
+              Value: "arn:aws:ecs:\\S+:\\d+:\\w+/av-cluster/av-ecs-(adapter|jobs)\\S+"
           Secrets:
             - Name: AP_ADAPTER_USERNAME
               ValueFrom: !Sub
