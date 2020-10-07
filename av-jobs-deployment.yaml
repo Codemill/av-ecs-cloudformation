@@ -187,10 +187,11 @@ Resources:
               Value: /usr/local/bin
             - Name: CLUSTER_XML
               Value: "/opt/ecs-cluster.xml"
-            - NAME: CLUSTER_NAME_REGEXP
-              Value:
+            - Name: CLUSTER_NAME
+              Value: 
+                Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
             - Name: SERVICE_NAME_REGEXP
-              Value:
+              Value: !Sub "${InfrastructureStackName}-(adapter|jobs)"
           Secrets:
             - Name: AP_ADAPTER_USERNAME
               ValueFrom:

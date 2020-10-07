@@ -4,11 +4,16 @@ read -rp "AWS Region (required): " REGION
 read -rp "AWS Profile [default]: " PROFILE
 read -rp "Infrastructure stack name [av-ecs]: " INFRASTRUCTURE_STACK_NAME
 read -rp "Cluster name [av-cluster]: " CLUSTER_NAME
-read -rp "Image registry credentials (required): " REGISTRY_CREDENTIALS
+read -rp "Image registry credentials ARN in SecretsManager (required): " REGISTRY_CREDENTIALS
 read -rp "Database name [accurateVideo]: " DATABASE_NAME
 read -rp "Database user [postgres]: " DATABASE_USER
 read -rp "Database class [db.t3.small]: " DATABASE_CLASS
 read -rp "Database size in GB [5]: " DATABASE_ALLOCATED_STORAGE
+
+read -rp "SSL Certificate Arn in CertificateManager which covers application domain name": CERTIFICATE_ARN
+read -rp "Route53 HostedZone domain name with trailing dot (e.g. example.com.)": HOSTED_ZONE_NAME
+read -rp "Application domain name with trailing dot (e.g. av.example.com.)": LOADBALANCER_DOMAIN_NAME
+
 
 PROFILE=${PROFILE:-default}
 INFRASTRUCTURE_STACK_NAME=${INFRASTRUCTURE_STACK_NAME:-av-ecs}
@@ -23,20 +28,20 @@ ANALYZE_IMAGE_TAG="1.2.1"
 FRONTEND_IMAGE_TAG="v4.2.2-rc.0"
 JOBS_IMAGE_TAG="4.2.1"
 
-ADAPTER_CONTAINER_CPU="256"
-ANALYZE_CONTAINER_CPU="256"
-FRONTEND_CONTAINER_CPU="256"
-JOBS_CONTAINER_CPU="512"
+ADAPTER_CONTAINER_CPU=256
+ANALYZE_CONTAINER_CPU=256
+FRONTEND_CONTAINER_CPU=256
+JOBS_CONTAINER_CPU=512
 
-ADAPTER_CONTAINER_MEMORY="1024"
-ANALYZE_CONTAINER_MEMORY="512"
-FRONTEND_CONTAINER_MEMORY="512"
-JOBS_CONTAINER_MEMORY="1024"
+ADAPTER_CONTAINER_MEMORY=1024
+ANALYZE_CONTAINER_MEMORY=512
+FRONTEND_CONTAINER_MEMORY=512
+JOBS_CONTAINER_MEMORY=1024
 
-ADAPTER_CONTAINER_DESIRED_COUNT="2"
-ANALYZE_CONTAINER_DESIRED_COUNT="2"
-FRONTEND_CONTAINER_DESIRED_COUNT="2"
-JOBS_CONTAINER_DESIRED_COUNT="2"
+ADAPTER_CONTAINER_DESIRED_COUNT=2
+ANALYZE_CONTAINER_DESIRED_COUNT=2
+FRONTEND_CONTAINER_DESIRED_COUNT=2
+JOBS_CONTAINER_DESIRED_COUNT=2
 
 
 if [ -z "${REGION}" ]; then
@@ -50,7 +55,7 @@ if [ -z "${REGISTRY_CREDENTIALS}" ]; then
 fi
 
 printf "Creating Infrastructure stack...\n"
-echo aws cloudformation create-stack \
+aws cloudformation create-stack \
   --template-body file://./infrastructure.yaml \
   --stack-name "${INFRASTRUCTURE_STACK_NAME}" \
   --parameters \
@@ -59,6 +64,9 @@ echo aws cloudformation create-stack \
     ParameterKey=DBUser,ParameterValue="${DATABASE_USER}" \
     ParameterKey=DBClass,ParameterValue="${DATABASE_CLASS}" \
     ParameterKey=DBAllocatedStorage,ParameterValue="${DATABASE_ALLOCATED_STORAGE}" \
+    ParameterKey=CertificateArn,ParameterValue="${CERTIFICATE_ARN}" \
+    ParameterKey=HostedZoneName,ParameterValue="${HOSTED_ZONE_NAME}" \
+    ParameterKey=LoadBalancerDomainName,ParameterValue="${LOADBALANCER_DOMAIN_NAME}" \
   --capabilities CAPABILITY_IAM \
   --region "${REGION}" \
   --profile "${PROFILE}"
@@ -82,6 +90,8 @@ CONFIG_BUCKET=$(aws cloudformation describe-stacks \
     --region "${REGION}" \
     --profile "${PROFILE}")
 
+aws s3 cp --recursive ./config/frontend "s3://${CONFIG_BUCKET}/frontend" --profile "${PROFILE}"
+
 printf "Creating %s stack...\n" "${INFRASTRUCTURE_STACK_NAME}-adapter"
 aws cloudformation create-stack \
   --template-body file://./av-adapter-deployment.yaml \
@@ -90,13 +100,14 @@ aws cloudformation create-stack \
     ParameterKey=InfrastructureStackName,ParameterValue="${INFRASTRUCTURE_STACK_NAME}" \
     ParameterKey=DBName,ParameterValue="${DATABASE_NAME}" \
     ParameterKey=ImageTag,ParameterValue="${ADAPTER_IMAGE_TAG}" \
-    ParameterKey=ContainerCpu,ParameterValue="${ADAPTER_CONTAINER_CPU}" \
-    ParameterKey=ContainerMemory,ParameterValue="${ADAPTER_CONTAINER_MEMORY}" \
-    ParameterKey=DesiredCount,ParameterValue="${ADAPTER_DESIRED_COUNT}" \
+    ParameterKey=ContainerCpu,ParameterValue=$((${ADAPTER_CONTAINER_CPU})) \
+    ParameterKey=ContainerMemory,ParameterValue=$((${ADAPTER_CONTAINER_MEMORY})) \
+    ParameterKey=DesiredCount,ParameterValue=$((${ADAPTER_DESIRED_COUNT})) \
     ParameterKey=RegistryCredentials,ParameterValue="${REGISTRY_CREDENTIALS}" \
   --capabilities CAPABILITY_IAM \
   --region "${REGION}" \
   --profile "${PROFILE}"
+
 printf "Creating %s stack...\n" "${INFRASTRUCTURE_STACK_NAME}-frontend"
 aws cloudformation create-stack \
   --template-body file://./av-frontend-deployment.yaml \
@@ -104,9 +115,9 @@ aws cloudformation create-stack \
   --parameters \
     ParameterKey=InfrastructureStackName,ParameterValue="${INFRASTRUCTURE_STACK_NAME}" \
     ParameterKey=ImageTag,ParameterValue="${FRONTEND_IMAGE_TAG}" \
-    ParameterKey=ContainerCpu,ParameterValue="${FRONTEND_CONTAINER_CPU}" \
-    ParameterKey=ContainerMemory,ParameterValue="${FRONTEND_CONTAINER_MEMORY}" \
-    ParameterKey=DesiredCount,ParameterValue="${FRONTEND_DESIRED_COUNT}" \
+    ParameterKey=ContainerCpu,ParameterValue=$((${FRONTEND_CONTAINER_CPU})) \
+    ParameterKey=ContainerMemory,ParameterValue=$((${FRONTEND_CONTAINER_MEMORY})) \
+    ParameterKey=DesiredCount,ParameterValue=$((${FRONTEND_DESIRED_COUNT})) \
     ParameterKey=RegistryCredentials,ParameterValue="${REGISTRY_CREDENTIALS}" \
   --capabilities CAPABILITY_IAM \
   --region "${REGION}" \
@@ -119,9 +130,9 @@ aws cloudformation create-stack \
   --parameters \
     ParameterKey=InfrastructureStackName,ParameterValue="${INFRASTRUCTURE_STACK_NAME}" \
     ParameterKey=ImageTag,ParameterValue="${ANALYZE_IMAGE_TAG}" \
-    ParameterKey=ContainerCpu,ParameterValue="${ANALYZE_CONTAINER_CPU}" \
-    ParameterKey=ContainerMemory,ParameterValue="${ANALYZE_CONTAINER_MEMORY}" \
-    ParameterKey=DesiredCount,ParameterValue="${ANALYZE_DESIRED_COUNT}" \
+    ParameterKey=ContainerCpu,ParameterValue=$((${ANALYZE_CONTAINER_CPU})) \
+    ParameterKey=ContainerMemory,ParameterValue=$((${ANALYZE_CONTAINER_MEMORY})) \
+    ParameterKey=DesiredCount,ParameterValue=$((${ANALYZE_DESIRED_COUNT})) \
     ParameterKey=RegistryCredentials,ParameterValue="${REGISTRY_CREDENTIALS}" \
   --capabilities CAPABILITY_IAM \
   --region "${REGION}" \
@@ -135,7 +146,7 @@ aws cloudformation wait stack-create-complete \
 
 ADAPTER_CREATE_CODE=$?
 if [ "${ADAPTER_CREATE_CODE}" != "0" ]; then
-  printf "ERR: Failed waiting for stack %s to complete: %s\n" "${INFRASTRUCTURE_STACK_NAME}" "${ADAPTER_CREATE_CODE}" >&2
+  printf "ERR: Failed waiting for stack %s to complete: %s\n" "${INFRASTRUCTURE_STACK_NAME}-adapter" "${ADAPTER_CREATE_CODE}" >&2
   exit 1
 fi
 
@@ -147,9 +158,9 @@ aws cloudformation create-stack \
     ParameterKey=InfrastructureStackName,ParameterValue="${INFRASTRUCTURE_STACK_NAME}" \
     ParameterKey=AdapterStackName,ParameterValue="${INFRASTRUCTURE_STACK_NAME}-adapter" \
     ParameterKey=ImageTag,ParameterValue="${JOBS_IMAGE_TAG}" \
-    ParameterKey=ContainerCpu,ParameterValue="${JOBS_CONTAINER_CPU}" \
-    ParameterKey=ContainerMemory,ParameterValue="${JOBS_CONTAINER_MEMORY}" \
-    ParameterKey=DesiredCount,ParameterValue="${JOBS_DESIRED_COUNT}" \
+    ParameterKey=ContainerCpu,ParameterValue=$((${JOBS_CONTAINER_CPU})) \
+    ParameterKey=ContainerMemory,ParameterValue=$((${JOBS_CONTAINER_MEMORY})) \
+    ParameterKey=DesiredCount,ParameterValue=$((${JOBS_DESIRED_COUNT})) \
     ParameterKey=RegistryCredentials,ParameterValue="${REGISTRY_CREDENTIALS}" \
   --capabilities CAPABILITY_IAM \
   --region "${REGION}" \

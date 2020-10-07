@@ -36,7 +36,16 @@ Parameters:
     Description: Used to tag all resources
     AllowedValues:
       - "accurate-video"
-
+  CertificateArn:
+    Description: SSL certificate ARN in CertificateManager which covers the domain name used for the load balancer 
+    Type: String
+  HostedZoneName:
+    Description: "Domain name of the hosted zone, including a trailing dot (e.g. example.com.)"
+    Type: String
+  LoadBalancerDomainName:
+    Description: "Domain name that will be given to the load balancer, including a trailing dot (e.g. av.example.com.)"
+    Type: String
+    
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -54,6 +63,9 @@ Metadata:
       - Label:
           default: "Other"
         Parameters:
+          - CertificateArn
+          - HostedZoneName
+          - LoadBalancerDomainName
           - ApplicationTag
 
 Mappings:
@@ -447,10 +459,10 @@ Resources:
           IpProtocol: "tcp"
           FromPort: 80
           ToPort: 80
-        # - CidrIp: 0.0.0.0/0
-        #   IpProtocol: "tcp"
-        #   FromPort: 443
-        #   ToPort: 443
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: "tcp"
+          FromPort: 443
+          ToPort: 443
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -473,7 +485,23 @@ Resources:
         - Key: application
           Value: !Ref ApplicationTag 
 
-  PublicLoadBalancerListener:
+  PublicLoadBalancerListenerHttp:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - RedirectConfig:
+            Host: '#{host}'
+            Path: '/#{path}'
+            Port: "443"
+            Protocol: HTTPS
+            Query: '#{query}'
+            StatusCode: HTTP_301
+          Type: redirect
+      LoadBalancerArn: !Ref PublicLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  PublicLoadBalancerListenerHttps:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
@@ -483,8 +511,21 @@ Resources:
             StatusCode: "200"
           Type: "fixed-response"
       LoadBalancerArn: !Ref "PublicLoadBalancer"
-      Port: 80
-      Protocol: HTTP
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: "ELBSecurityPolicy-2016-08"
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+
+  AliasRecord:
+    Type: AWS::Route53::RecordSet
+    Properties: 
+      AliasTarget: 
+        DNSName: !GetAtt PublicLoadBalancer.DNSName
+        HostedZoneId: !GetAtt PublicLoadBalancer.CanonicalHostedZoneID
+      HostedZoneName: !Ref HostedZoneName
+      Name: !Ref LoadBalancerDomainName
+      Type: A
 
   ######################## CloudWatch Log Group #######################
   #####################################################################
@@ -579,7 +620,7 @@ Outputs:
       Name: !Sub ${AWS::StackName}:ExternalUrl
   PublicListener:
     Description: The ARN of the public load balancer's Listener
-    Value: !Ref PublicLoadBalancerListener
+    Value: !Ref PublicLoadBalancerListenerHttps
     Export:
       Name: !Sub ${AWS::StackName}:PublicListener
   VPCId:
