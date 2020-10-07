@@ -22,7 +22,7 @@ Parameters:
     Description: The docker image repo to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.3.0-rc1
+    Default: 4.3.0-rc2
     Description: The docker image tag to use for image deployment
   RegistryCredentials:
     Type: String
@@ -117,8 +117,8 @@ Metadata:
           - ApplicationTag
 
 Conditions:
-  UseElementalAwsRole: !Not [ !Equals [!Ref AwsRole, ""] ]
-  UseElementalQueue: !Not [ !Equals [!Ref ElementalQueue, ""] ]
+  UseElementalAwsRole: !Not [!Equals [!Ref AwsRole, ""]]
+  UseElementalQueue: !Not [!Equals [!Ref ElementalQueue, ""]]
 
 Resources:
   # The task definition. This is a simple metadata description of what
@@ -178,33 +178,35 @@ Resources:
                 Value: !Ref AwsRole
               - !Ref AWS::NoValue
             - Name: AP_ADAPTER_URL_MP_REST_URL
-              Value:
-                !Sub
-                  - "http://${AdapterServiceName}.av.local:8080"
-                  - AdapterServiceName:
-                      Fn::ImportValue: !Sub ${AdapterStackName}:DiscoveryServiceName
+              Value: !Sub
+                - "http://${AdapterServiceName}.av.local:8080"
+                - AdapterServiceName:
+                    Fn::ImportValue: !Sub ${AdapterStackName}:DiscoveryServiceName
             - Name: AV_RUNNER_BINDIR
               Value: /usr/local/bin
             - Name: CLUSTER_XML
               Value: "/opt/ecs-cluster.xml"
-            - Name: CLUSTER_NAME
-              Value: 
-                Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
+            - Name: CLUSTER_NAME_REGEXP
+              Value: !Sub
+                - "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
+                - ClusterName:
+                    Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
             - Name: SERVICE_NAME_REGEXP
-              Value: !Sub "${InfrastructureStackName}-(adapter|jobs)"
+              Value: !Sub
+                - "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${ClusterName}-(adapter-jobs)"
+                - ClusterName:
+                    Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
           Secrets:
             - Name: AP_ADAPTER_USERNAME
-              ValueFrom:
-                !Sub
-                  - "${AuthRunnerSecretArn}:username::"
-                  - AuthRunnerSecretArn:
-                      Fn::ImportValue: !Sub ${AdapterStackName}:AuthRunnerSecretArn
+              ValueFrom: !Sub
+                - "${AuthRunnerSecretArn}:username::"
+                - AuthRunnerSecretArn:
+                    Fn::ImportValue: !Sub ${AdapterStackName}:AuthRunnerSecretArn
             - Name: AP_ADAPTER_PASSWORD
-              ValueFrom:
-                !Sub
-                  - "${AuthRunnerSecretArn}:password::"
-                  - AuthRunnerSecretArn:
-                      Fn::ImportValue: !Sub ${AdapterStackName}:AuthRunnerSecretArn
+              ValueFrom: !Sub
+                - "${AuthRunnerSecretArn}:password::"
+                - AuthRunnerSecretArn:
+                    Fn::ImportValue: !Sub ${AdapterStackName}:AuthRunnerSecretArn
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -232,6 +234,13 @@ Resources:
                   - Fn::ImportValue: !Sub ${AdapterStackName}:AuthRunnerSecretArn
               - Effect: Allow
                 Action:
+                  - "ecs:ListClusters"
+                  - "ecs:ListServices"
+                  - "ecs:ListTasks"
+                  - "ecs:DescribeTasks"
+                Resource: "*"
+              - Effect: Allow
+                Action:
                   - "logs:CreateLogStream"
                   - "logs:PutLogEvents"
                 Resource:
@@ -245,11 +254,11 @@ Resources:
                   - "s3:HeadObject"
                   - "s3:GetObject"
                   - "s3:PutObject"
-                NotResource: 
+                NotResource:
                   - !Sub
                     - arn:aws:s3:::${ConfigBucketName}/*
                     - ConfigBucketName:
-                        Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"      
+                        Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
       Tags:
         - Key: application
           Value: !Ref ApplicationTag

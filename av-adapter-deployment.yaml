@@ -21,7 +21,7 @@ Parameters:
     Description: The ecr repo and tag to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.3.0-rc1
+    Default: 4.3.0-rc2
     Description: The ecr repo and tag to use for image deployment
   ContainerCpu:
     Type: Number
@@ -114,9 +114,9 @@ Resources:
           Image: !Sub ${ImageRepoName}:${ImageTag}
           PortMappings:
             - ContainerPort: 8080
-            - ContainerPort: 5700
+            # - ContainerPort: 5700
             - ContainerPort: 5701
-            - ContainerPort: 5702
+            # - ContainerPort: 5702
           LogConfiguration:
             LogDriver: "awslogs"
             Options:
@@ -175,11 +175,16 @@ Resources:
               Value: "/api"
             - Name: CLUSTER_XML
               Value: "/opt/ecs-cluster.xml"
-            - Name: CLUSTER_NAME
-              Value: 
-                Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
+            - Name: CLUSTER_NAME_REGEXP
+              Value: !Sub
+                - "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
+                - ClusterName:
+                    Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
             - Name: SERVICE_NAME_REGEXP
-              Value: !Sub "${InfrastructureStackName}-(adapter|jobs)"
+              Value: !Sub
+                - "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${ClusterName}-(adapter-jobs)"
+                - ClusterName:
+                    Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
           Secrets:
             - Name: QUARKUS_DATASOURCE_USERNAME
               ValueFrom: !Sub
@@ -223,6 +228,13 @@ Resources:
                   - !Ref AuthRunnerSecret
               - Effect: Allow
                 Action:
+                  - "ecs:ListClusters"
+                  - "ecs:ListServices"
+                  - "ecs:ListTasks"
+                  - "ecs:DescribeTasks"
+                Resource: "*"
+              - Effect: Allow
+                Action:
                   - "logs:CreateLogStream"
                   - "logs:PutLogEvents"
                 Resource:
@@ -236,7 +248,7 @@ Resources:
                   - "s3:HeadObject"
                   - "s3:GetObject"
                   - "s3:PutObject"
-                NotResource: 
+                NotResource:
                   - !Sub
                     - arn:aws:s3:::${ConfigBucketName}/*
                     - ConfigBucketName:
