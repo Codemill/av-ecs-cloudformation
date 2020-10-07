@@ -181,12 +181,15 @@ Resources:
                         Fn::ImportValue: !Sub ${InfrastructureStackName}:AVLogGroup
               - Effect: Allow
                 Action:
+                  - "s3:ListBucket"
+                  - "s3:HeadObject"
                   - "s3:GetObject"
-                Resource:
+                  - "s3:PutObject"
+                NotResource: 
                   - !Sub
-                      - arn:aws:s3:::${ConfigBucketName}/*
-                      - ConfigBucketName:
-                          Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
+                    - arn:aws:s3:::${ConfigBucketName}/*
+                    - ConfigBucketName:
+                        Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
