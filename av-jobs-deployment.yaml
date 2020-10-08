@@ -22,7 +22,7 @@ Parameters:
     Description: The docker image repo to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.3.0-rc2
+    Default: 4.3.0-rc6
     Description: The docker image tag to use for image deployment
   RegistryCredentials:
     Type: String
@@ -143,6 +143,7 @@ Resources:
             CredentialsParameter: !Ref "RegistryCredentials"
           PortMappings:
             - ContainerPort: 5701
+            - ContainerPort: 5699
           LogConfiguration:
             LogDriver: "awslogs"
             Options:
@@ -155,6 +156,10 @@ Resources:
               Value: "0.0.0.0"
             - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_HOST
               Value: !Sub ${ServiceName}.av.local
+            - Name: QUARKUS_VERTX_CLUSTER_PORT
+              Value: 5699
+            - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_PORT
+              Value: 5699
             - Name: AV_RUNNER_BLACK_FRAME_LOCATION
               Value: !Ref BlackFrameLocation
             - Name: AV_RUNNER_BLACK_FRAME_DURATION
@@ -192,7 +197,10 @@ Resources:
                 - ClusterName:
                     Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
             - Name: SERVICE_NAME_REGEXP
-              Value: "arn:aws:ecs:\\S+:\\d+:\\w+/av-cluster/av-ecs-(adapter|jobs)\\S+"
+              Value: !Sub
+                - "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${InfrastructureStackName}-(adapter|jobs)\\S+"
+                - ClusterName:
+                    Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
           Secrets:
             - Name: AP_ADAPTER_USERNAME
               ValueFrom: !Sub
@@ -259,6 +267,27 @@ Resources:
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
+          
+  DiscoveryService:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Description: Discovery Service for the Demo Application
+      DnsConfig:
+        RoutingPolicy: MULTIVALUE
+        DnsRecords:
+          - TTL: 60
+            Type: A
+          - TTL: 60
+            Type: SRV
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+      Name: !Ref "ServiceName"
+      NamespaceId:
+        Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateDNSNamespace
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
 
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
@@ -273,6 +302,9 @@ Resources:
         MaximumPercent: 200
         MinimumHealthyPercent: 75
       DesiredCount: !Ref "DesiredCount"
+      ServiceRegistries:
+        - RegistryArn: !GetAtt DiscoveryService.Arn
+          Port: 5699
       NetworkConfiguration:
         AwsvpcConfiguration:
           SecurityGroups:

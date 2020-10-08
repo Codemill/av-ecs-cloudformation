@@ -39,7 +39,7 @@ Parameters:
   CertificateArn:
     Description: SSL certificate ARN in CertificateManager which covers the domain name used for the load balancer 
     Type: String
-  HostedZoneName:
+  HostedZoneDomainName:
     Description: "Domain name of the hosted zone, including a trailing dot (e.g. example.com.)"
     Type: String
   LoadBalancerDomainName:
@@ -387,6 +387,16 @@ Resources:
       SourceSecurityGroupId: !Ref "AvJobsSG"
       GroupId: !Ref AvAdapterSG
 
+  AdapterSgIngressJobsHazelcast:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: 
+      Description: Access from the Jobs service
+      IpProtocol: "tcp"
+      FromPort: 5699
+      ToPort: 5702
+      SourceSecurityGroupId: !Ref "AvJobsSG"
+      GroupId: !Ref AvAdapterSG
+
   AvFrontendSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -433,6 +443,16 @@ Resources:
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
+
+  JobsSgIngressAdapterHazelcast:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: 
+      Description: Access from the Adapter service
+      IpProtocol: "tcp"
+      FromPort: 5699
+      ToPort: 5702
+      SourceSecurityGroupId: !Ref AvAdapterSG
+      GroupId: !Ref AvJobsSG
 
   ################################ ECS ################################
   #####################################################################
@@ -523,7 +543,7 @@ Resources:
       AliasTarget: 
         DNSName: !GetAtt PublicLoadBalancer.DNSName
         HostedZoneId: !GetAtt PublicLoadBalancer.CanonicalHostedZoneID
-      HostedZoneName: !Ref HostedZoneName
+      HostedZoneName: !Ref HostedZoneDomainName
       Name: !Ref LoadBalancerDomainName
       Type: A
 

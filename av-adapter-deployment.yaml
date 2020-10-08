@@ -21,7 +21,7 @@ Parameters:
     Description: The ecr repo and tag to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.3.0-rc2
+    Default: 4.3.0-rc6
     Description: The ecr repo and tag to use for image deployment
   ContainerCpu:
     Type: Number
@@ -45,7 +45,7 @@ Parameters:
       assigned to different paths on the load balancer.
   DesiredCount:
     Type: Number
-    Default: 2
+    Default: 1
     Description: How many copies of the service task to run
   RegistryCredentials:
     Type: String
@@ -116,6 +116,7 @@ Resources:
             - ContainerPort: 8080
             # - ContainerPort: 5700
             - ContainerPort: 5701
+            - ContainerPort: 5699
             # - ContainerPort: 5702
           LogConfiguration:
             LogDriver: "awslogs"
@@ -171,6 +172,10 @@ Resources:
               Value: "0.0.0.0"
             - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_HOST
               Value: !Sub ${ServiceName}.av.local
+            - Name: QUARKUS_VERTX_CLUSTER_PORT
+              Value: 5699
+            - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_PORT
+              Value: 5699
             - Name: HTTP_PATH_PREFIX
               Value: "/api"
             - Name: CLUSTER_XML
@@ -181,7 +186,10 @@ Resources:
                 - ClusterName:
                     Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
             - Name: SERVICE_NAME_REGEXP
-              Value: "arn:aws:ecs:\\S+:\\d+:\\w+/av-cluster/av-ecs-(adapter|jobs)\\S+"
+              Value: !Sub
+                - "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${InfrastructureStackName}-(adapter|jobs)\\S+"
+                - ClusterName:
+                    Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
           Secrets:
             - Name: QUARKUS_DATASOURCE_USERNAME
               ValueFrom: !Sub
