@@ -172,6 +172,8 @@ Resources:
               Value: !Ref LowresTemplateId
             - Name: AV_RUNNER_AUDIO_EXTRACT_TEMPLATE_ID
               Value: !Ref AudioExtractTemplateId
+            - Name: AV_RUNNER_EXECUTOR_POLL_INTERVAL
+              Value: PT1M
             - !If
               - UseElementalQueue
               - Name: AV_RUNNER_ELEMENTAL_QUEUE

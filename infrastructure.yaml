@@ -397,6 +397,16 @@ Resources:
       SourceSecurityGroupId: !Ref "AvJobsSG"
       GroupId: !Ref AvAdapterSG
 
+  AdapterSgIngressAdapterHazelcast:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: 
+      Description: Access from the Jobs service
+      IpProtocol: "tcp"
+      FromPort: 5699
+      ToPort: 5702
+      SourceSecurityGroupId: !Ref "AvAdapterSG"
+      GroupId: !Ref AvAdapterSG
+
   AvFrontendSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -452,6 +462,16 @@ Resources:
       FromPort: 5699
       ToPort: 5702
       SourceSecurityGroupId: !Ref AvAdapterSG
+      GroupId: !Ref AvJobsSG
+
+  JobsSgIngressJobsHazelcast:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties: 
+      Description: Access from the Jobs service
+      IpProtocol: "tcp"
+      FromPort: 5699
+      ToPort: 5702
+      SourceSecurityGroupId: !Ref AvJobsSG
       GroupId: !Ref AvJobsSG
 
   ################################ ECS ################################
