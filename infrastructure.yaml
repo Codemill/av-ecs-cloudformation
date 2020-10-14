@@ -39,7 +39,7 @@ Parameters:
   CertificateArn:
     Description: SSL certificate ARN in CertificateManager which covers the domain name used for the load balancer 
     Type: String
-  HostedZoneDomainName:
+  HostedZoneName:
     Description: "Domain name of the hosted zone, including a trailing dot (e.g. example.com.)"
     Type: String
   LoadBalancerDomainName:
@@ -563,7 +563,7 @@ Resources:
       AliasTarget: 
         DNSName: !GetAtt PublicLoadBalancer.DNSName
         HostedZoneId: !GetAtt PublicLoadBalancer.CanonicalHostedZoneID
-      HostedZoneName: !Ref HostedZoneDomainName
+      HostedZoneName: !Ref HostedZoneName
       Name: !Ref LoadBalancerDomainName
       Type: A
 
