@@ -102,7 +102,7 @@ aws cloudformation create-stack \
     ParameterKey=ImageTag,ParameterValue="${ADAPTER_IMAGE_TAG}" \
     ParameterKey=ContainerCpu,ParameterValue=$((${ADAPTER_CONTAINER_CPU})) \
     ParameterKey=ContainerMemory,ParameterValue=$((${ADAPTER_CONTAINER_MEMORY})) \
-    ParameterKey=DesiredCount,ParameterValue=$((${ADAPTER_DESIRED_COUNT})) \
+    ParameterKey=DesiredCount,ParameterValue=$((${ADAPTER_CONTAINER_DESIRED_COUNT})) \
     ParameterKey=RegistryCredentials,ParameterValue="${REGISTRY_CREDENTIALS}" \
   --capabilities CAPABILITY_IAM \
   --region "${REGION}" \
@@ -117,7 +117,7 @@ aws cloudformation create-stack \
     ParameterKey=ImageTag,ParameterValue="${FRONTEND_IMAGE_TAG}" \
     ParameterKey=ContainerCpu,ParameterValue=$((${FRONTEND_CONTAINER_CPU})) \
     ParameterKey=ContainerMemory,ParameterValue=$((${FRONTEND_CONTAINER_MEMORY})) \
-    ParameterKey=DesiredCount,ParameterValue=$((${FRONTEND_DESIRED_COUNT})) \
+    ParameterKey=DesiredCount,ParameterValue=$((${FRONTEND_CONTAINER_DESIRED_COUNT})) \
     ParameterKey=RegistryCredentials,ParameterValue="${REGISTRY_CREDENTIALS}" \
   --capabilities CAPABILITY_IAM \
   --region "${REGION}" \
@@ -132,7 +132,7 @@ aws cloudformation create-stack \
     ParameterKey=ImageTag,ParameterValue="${ANALYZE_IMAGE_TAG}" \
     ParameterKey=ContainerCpu,ParameterValue=$((${ANALYZE_CONTAINER_CPU})) \
     ParameterKey=ContainerMemory,ParameterValue=$((${ANALYZE_CONTAINER_MEMORY})) \
-    ParameterKey=DesiredCount,ParameterValue=$((${ANALYZE_DESIRED_COUNT})) \
+    ParameterKey=DesiredCount,ParameterValue=$((${ANALYZE_CONTAINER_DESIRED_COUNT})) \
     ParameterKey=RegistryCredentials,ParameterValue="${REGISTRY_CREDENTIALS}" \
   --capabilities CAPABILITY_IAM \
   --region "${REGION}" \
@@ -160,7 +160,7 @@ aws cloudformation create-stack \
     ParameterKey=ImageTag,ParameterValue="${JOBS_IMAGE_TAG}" \
     ParameterKey=ContainerCpu,ParameterValue=$((${JOBS_CONTAINER_CPU})) \
     ParameterKey=ContainerMemory,ParameterValue=$((${JOBS_CONTAINER_MEMORY})) \
-    ParameterKey=DesiredCount,ParameterValue=$((${JOBS_DESIRED_COUNT})) \
+    ParameterKey=DesiredCount,ParameterValue=$((${JOBS_CONTAINER_DESIRED_COUNT})) \
     ParameterKey=RegistryCredentials,ParameterValue="${REGISTRY_CREDENTIALS}" \
   --capabilities CAPABILITY_IAM \
   --region "${REGION}" \
