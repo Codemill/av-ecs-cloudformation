@@ -6,9 +6,16 @@
 
 - Install [AWS CLI](https://aws.amazon.com/cli/)
 - [Configure CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html)
-- Add image repository credentials to [Secrets Manager](https://aws.amazon.com/secrets-manager/)
+- Add image repository credentials to [Secrets Manager](https://aws.amazon.com/secrets-manager/). Use the DefaultEncryptionKey and add the username/password on the format 
+    ``` json 
+    {
+        "username": "<USERNAME>",
+        "password": "<PASSWORD>"
+    }
+    ```
+
 - Route53 Hosted Zone in which a DNS record pointing to the load balancer will be created [Create Hosted Zone](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/CreatingHostedZone.html)
-- Certificate stored in CertificateManager which covers the domain name that the load balancer will be given [Create certificate in ACM](https://docs.aws.amazon.com/acm/latest/userguide/gs-acm-request-public.html)
+- Certificate stored and validated in CertificateManager which covers the domain name that the load balancer will be given [Create certificate in ACM](https://docs.aws.amazon.com/acm/latest/userguide/gs-acm-request-public.html)
 
 ### Configuration
 
