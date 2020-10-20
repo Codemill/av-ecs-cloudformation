@@ -3,7 +3,7 @@ Description: Deploy a service on AWS Fargate, hosted in a private subnet, but ac
 Parameters:
   InfrastructureStackName:
     Type: String
-    Default: av-ecs
+    Default: av-infrastructure
     Description:
       The name of the parent Fargate networking stack that you created. Necessary
       to locate and reference resources created by that stack.
@@ -71,6 +71,7 @@ Parameters:
   ClusterName:
     Description: "ECS cluster name"
     Type: String
+    Default: av-cluster
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -145,10 +146,6 @@ Resources:
           RepositoryCredentials:
             CredentialsParameter: !Ref "RegistryCredentials"
           Environment:
-            - Name: AUTH_SONY_ENABLED
-              Value: "true"
-            - Name: AUTH_SONY_URL_MP_REST_URL
-              Value: https://accurate-player-demo-assets.s3.eu-central-1.amazonaws.com/
             - Name: ACL_ENABLED
               Value: "false"
             - Name: ACL_STORAGE_ENABLED
@@ -158,7 +155,7 @@ Resources:
             - Name: AUTH_FALLBACK_USERNAME
               Value: "false"
             - Name: AUTH_JWT_ENABLED
-              Value: "false"
+              Value: "true"
             - Name: AUTH_JWT_ISSUER
               Value: "https://keycloak.codemill.cloud/auth/realms/av-dev"
             - Name: AUTH_JWT_JWK_FILENAME

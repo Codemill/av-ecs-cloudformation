@@ -3,7 +3,7 @@ Description: Deploy a service on AWS Fargate, hosted in a private subnet, but ac
 Parameters:
   InfrastructureStackName:
     Type: String
-    Default: av-ecs
+    Default: av-infrastructure
     Description:
       The name of the parent Fargate networking stack that you created. Necessary
       to locate and reference resources created by that stack.
@@ -17,7 +17,7 @@ Parameters:
     Description: The repo and tag to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.3.2›
+    Default: 4.3.2
     Description: The ecr repo and tag to use for image deployment
   ContainerCpu:
     Type: Number
@@ -67,6 +67,7 @@ Parameters:
   ClusterName:
     Description: "ECS cluster name"
     Type: String
+    Default: av-cluster
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:

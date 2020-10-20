@@ -20,9 +20,12 @@ Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
-          default: "Configuration"
+          default: "Network configuration"
         Parameters:
           - VpcCidr
+      - Label:
+          default: "Other"
+        Parameters:
           - ApplicationTag
 
 Resources:

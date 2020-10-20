@@ -31,17 +31,17 @@ Parameters:
     AllowedValues:
       - "accurate-video"
   Vpc:
-    Description: "VPC ID"
     Type: AWS::EC2::VPC::Id
+    Description: "VPC ID"
   PrivateSubnetOne:
+    Type: AWS::EC2::Subnet::Id
     Description: "Private Subnet One ID"
-    Type: AWS::EC2::Subnet::Id
   PrivateSubnetTwo:
-    Description: "Private Subnet Two ID"
     Type: AWS::EC2::Subnet::Id
+    Description: "Private Subnet Two ID"
   PublicLoadBalancerSG:
-    Description: "Public Loadbalancer Security Group"
     Type: AWS::EC2::SecurityGroup::Id
+    Description: "Public Loadbalancer Security Group"
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -56,7 +56,6 @@ Metadata:
       - Label:
           default: "ECS cluster configuration"
         Parameters:
-          - ClusterName
           - Vpc
           - PrivateSubnetOne
           - PrivateSubnetTwo
