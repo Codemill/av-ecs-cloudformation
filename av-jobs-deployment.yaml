@@ -78,7 +78,12 @@ Parameters:
     Type: String
     Default: ""
     Description: Will use default queue if not configured
-
+  PrivateSubnetOne:
+    Description: "Private Subnet One ID"
+    Type: AWS::EC2::Subnet::Id
+  PrivateSubnetTwo:
+    Description: "Private Subnet Two ID"
+    Type: AWS::EC2::Subnet::Id
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -312,8 +317,8 @@ Resources:
           SecurityGroups:
             - Fn::ImportValue: !Sub ${InfrastructureStackName}:AvJobsSG
           Subnets:
-            - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetOne
-            - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetTwo
+            - !Ref PrivateSubnetOne
+            - !Ref PrivateSubnetTwo
       TaskDefinition: !Ref "TaskDefinition"
       Tags:
         - Key: application

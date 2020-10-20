@@ -69,7 +69,15 @@ Parameters:
     Type: String
     Default: "/api"
     Description: ""
-
+  Vpc:
+    Description: "VPC ID"
+    Type: AWS::EC2::VPC::Id
+  PrivateSubnetOne:
+    Description: "Private Subnet One ID"
+    Type: AWS::EC2::Subnet::Id
+  PrivateSubnetTwo:
+    Description: "Private Subnet Two ID"
+    Type: AWS::EC2::Subnet::Id
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -236,8 +244,8 @@ Resources:
           SecurityGroups:
             - Fn::ImportValue: !Sub ${InfrastructureStackName}:AvAnalyzeSG
           Subnets:
-            - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetOne
-            - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetTwo
+            - !Ref PrivateSubnetOne
+            - !Ref PrivateSubnetTwo
       TaskDefinition: !Ref "TaskDefinition"
       LoadBalancers:
         - ContainerName: !Ref "ServiceName"
@@ -273,8 +281,7 @@ Resources:
       Port: 8080
       Protocol: HTTP
       UnhealthyThresholdCount: 2
-      VpcId:
-        Fn::ImportValue: !Sub ${InfrastructureStackName}:VPCId
+      VpcId: !Ref Vpc
       Tags:
         - Key: application
           Value: !Ref ApplicationTag

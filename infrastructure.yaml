@@ -1,6 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: This template will deploy a stack containing a VPC with public 
-  and private subnets. It will also deploy an public Application Load Balancer
+Description: This template will deploy a public Application Load Balancer
   used to route traffic to the containers in the private subnets. There is also
   a Cloud Map private DNS namespace which allows services to find each other 
   without going through the ALB. A RDS Postgres database instance will also be 
@@ -45,6 +44,21 @@ Parameters:
   LoadBalancerDomainName:
     Description: "Domain name that will be given to the load balancer, including a trailing dot (e.g. av.example.com.)"
     Type: String
+  Vpc:
+    Description: "VPC ID"
+    Type: AWS::EC2::VPC::Id
+  PublicSubnetOne:
+    Description: "Public Subnet One ID"
+    Type: AWS::EC2::Subnet::Id
+  PublicSubnetTwo:
+    Description: "Public Subnet Two ID"
+    Type: AWS::EC2::Subnet::Id
+  PrivateSubnetOne:
+    Description: "Private Subnet One ID"
+    Type: AWS::EC2::Subnet::Id
+  PrivateSubnetTwo:
+    Description: "Private Subnet Two ID"
+    Type: AWS::EC2::Subnet::Id
     
 Metadata:
   AWS::CloudFormation::Interface:
@@ -68,220 +82,12 @@ Metadata:
           - LoadBalancerDomainName
           - ApplicationTag
 
-Mappings:
-  SubnetConfig:
-    VPC:
-      CIDR: "10.0.0.0/16" # Range: 10.0.0.0 - 10.0.255.255
-    PublicOne:
-      CIDR: "10.0.0.0/24" # Range: 10.0.0.0 - 10.0.0.255
-    PublicTwo:
-      CIDR: "10.0.1.0/24" # Range: 10.0.1.0 - 10.0.1.255
-    PrivateOne:
-      CIDR: "10.0.2.0/24" # Range: 10.0.2.0 - 10.0.2.255
-    PrivateTwo:
-      CIDR: "10.0.3.0/24" # Range: 10.0.3.0 - 10.0.3.255
-
 Resources:
-  ################################ VPC ################################
-  #####################################################################
-  # VPC with two public subnets and two private subnets distributed over 
-  # two availability zones for high availability.
-  VPC:
-    Type: AWS::EC2::VPC
-    Properties:
-      EnableDnsSupport: true
-      EnableDnsHostnames: true
-      CidrBlock: !FindInMap ["SubnetConfig", "VPC", "CIDR"]
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-
-  # Public subnets, where resources can be assigned public IP addresses
-  PublicSubnetOne:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone:
-        Fn::Select:
-          - 0
-          - Fn::GetAZs: { Ref: "AWS::Region" }
-      VpcId: !Ref "VPC"
-      CidrBlock: !FindInMap ["SubnetConfig", "PublicOne", "CIDR"]
-      MapPublicIpOnLaunch: true
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-  PublicSubnetTwo:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone:
-        Fn::Select:
-          - 1
-          - Fn::GetAZs: { Ref: "AWS::Region" }
-      VpcId: !Ref "VPC"
-      CidrBlock: !FindInMap ["SubnetConfig", "PublicTwo", "CIDR"]
-      MapPublicIpOnLaunch: true
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-
-  # Private subnets, where resources will only be assigned private IP addresses
-  PrivateSubnetOne:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone:
-        Fn::Select:
-          - 0
-          - Fn::GetAZs: { Ref: "AWS::Region" }
-      VpcId: !Ref "VPC"
-      CidrBlock: !FindInMap ["SubnetConfig", "PrivateOne", "CIDR"]
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-  PrivateSubnetTwo:
-    Type: AWS::EC2::Subnet
-    Properties:
-      AvailabilityZone:
-        Fn::Select:
-          - 1
-          - Fn::GetAZs: { Ref: "AWS::Region" }
-      VpcId: !Ref "VPC"
-      CidrBlock: !FindInMap ["SubnetConfig", "PrivateTwo", "CIDR"]
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-
-  # Networking resources for the public subnets. Resources in the public subnets 
-  # have public IP addresses and internet traffic is routed via the internet gateway.
-  InternetGateway:
-    Type: AWS::EC2::InternetGateway
-    Properties:
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-  GatewayAttachment:
-    Type: AWS::EC2::VPCGatewayAttachment
-    Properties:
-      VpcId: !Ref "VPC"
-      InternetGatewayId: !Ref "InternetGateway"
-  PublicRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref "VPC"
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-  PublicRoute:
-    Type: AWS::EC2::Route
-    DependsOn: GatewayAttachment
-    Properties:
-      RouteTableId: !Ref "PublicRouteTable"
-      DestinationCidrBlock: "0.0.0.0/0"
-      GatewayId: !Ref "InternetGateway"
-  PublicSubnetOneRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref PublicSubnetOne
-      RouteTableId: !Ref PublicRouteTable
-  PublicSubnetTwoRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref PublicSubnetTwo
-      RouteTableId: !Ref PublicRouteTable
-
-  # Setup networking resources for the private subnets. Resources in these subnets 
-  # have only private IP addresses, and must use a NAT gateway to talk to the internet. 
-  # We launch two NAT gateways, one in each public subnet.
-  ElasticIpOne:
-    Type: AWS::EC2::EIP
-    DependsOn: GatewayAttachment
-    Properties:
-      Domain: vpc
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-  ElasticIpTwo:
-    Type: AWS::EC2::EIP
-    DependsOn: GatewayAttachment
-    Properties:
-      Domain: vpc
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-  NatGatewayOne:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId: !GetAtt ElasticIpOne.AllocationId
-      SubnetId: !Ref PublicSubnetOne
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-  NatGatewayTwo:
-    Type: AWS::EC2::NatGateway
-    Properties:
-      AllocationId: !GetAtt ElasticIpTwo.AllocationId
-      SubnetId: !Ref PublicSubnetTwo
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-  PrivateRouteTableOne:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref "VPC"
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-  PrivateRouteOne:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref PrivateRouteTableOne
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatGatewayOne
-  PrivateRouteTableOneAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref PrivateRouteTableOne
-      SubnetId: !Ref PrivateSubnetOne
-  PrivateRouteTableTwo:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref "VPC"
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-  PrivateRouteTwo:
-    Type: AWS::EC2::Route
-    Properties:
-      RouteTableId: !Ref PrivateRouteTableTwo
-      DestinationCidrBlock: 0.0.0.0/0
-      NatGatewayId: !Ref NatGatewayTwo
-  PrivateRouteTableTwoAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref PrivateRouteTableTwo
-      SubnetId: !Ref PrivateSubnetTwo
-
-  VpcEndpointS3:
-    Type: AWS::EC2::VPCEndpoint
-    Properties: 
-      PolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Action: "*"
-            Principal: "*"
-            Resource: "*"
-      RouteTableIds: 
-        - !Ref PrivateRouteTableOne
-        - !Ref PrivateRouteTableTwo
-      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
-      VpcEndpointType: Gateway
-      VpcId: !Ref VPC
-
   PrivateDNSNamespace:
     Type: AWS::ServiceDiscovery::PrivateDnsNamespace
     Properties:
       Name: av.local
-      Vpc: !Ref "VPC"
+      Vpc: !Ref "Vpc"
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -343,7 +149,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Access to RDS instance
-      VpcId: !Ref "VPC"
+      VpcId: !Ref "Vpc"
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -362,7 +168,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Access to Adapter service
-      VpcId: !Ref "VPC"
+      VpcId: !Ref "Vpc"
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -411,7 +217,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Access to Frontend service
-      VpcId: !Ref "VPC"
+      VpcId: !Ref "Vpc"
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -430,7 +236,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Access to Analyze service
-      VpcId: !Ref "VPC"
+      VpcId: !Ref "Vpc"
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -449,7 +255,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Database access from adapter/backend
-      VpcId: !Ref "VPC"
+      VpcId: !Ref "Vpc"
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -493,7 +299,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Access to the public facing load balancer
-      VpcId: !Ref "VPC"
+      VpcId: !Ref "Vpc"
       SecurityGroupIngress:
         - CidrIp: 0.0.0.0/0
           IpProtocol: "tcp"
@@ -509,7 +315,6 @@ Resources:
 
   PublicLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    DependsOn: GatewayAttachment
     Properties:
       Scheme: internet-facing
       LoadBalancerAttributes:
@@ -663,31 +468,6 @@ Outputs:
     Value: !Ref PublicLoadBalancerListenerHttps
     Export:
       Name: !Sub ${AWS::StackName}:PublicListener
-  VPCId:
-    Description: The ID of the VPC that this stack is deployed in
-    Value: !Ref "VPC"
-    Export:
-      Name: !Sub ${AWS::StackName}:VPCId
-  PublicSubnetOne:
-    Description: Public subnet one
-    Value: !Ref "PublicSubnetOne"
-    Export:
-      Name: !Sub ${AWS::StackName}:PublicSubnetOne
-  PublicSubnetTwo:
-    Description: Public subnet two
-    Value: !Ref "PublicSubnetTwo"
-    Export:
-      Name: !Sub ${AWS::StackName}:PublicSubnetTwo
-  PrivateSubnetOne:
-    Description: Private subnet one
-    Value: !Ref "PrivateSubnetOne"
-    Export:
-      Name: !Sub ${AWS::StackName}:PrivateSubnetOne
-  PrivateSubnetTwo:
-    Description: Private subnet two
-    Value: !Ref "PrivateSubnetTwo"
-    Export:
-      Name: !Sub ${AWS::StackName}:PrivateSubnetTwo
   PrivateNamespace:
     Description: Private DNS namespace
     Value: !Ref "PrivateDNSNamespace"

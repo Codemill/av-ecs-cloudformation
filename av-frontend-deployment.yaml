@@ -52,7 +52,15 @@ Parameters:
     Default: "accurate-video"
     AllowedValues:
       - "accurate-video"
-
+  Vpc:
+    Description: "VPC ID"
+    Type: AWS::EC2::VPC::Id
+  PrivateSubnetOne:
+    Description: "Private Subnet One ID"
+    Type: AWS::EC2::Subnet::Id
+  PrivateSubnetTwo:
+    Description: "Private Subnet Two ID"
+    Type: AWS::EC2::Subnet::Id
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -188,8 +196,8 @@ Resources:
           SecurityGroups:
             - Fn::ImportValue: !Sub ${InfrastructureStackName}:AvFrontendSG
           Subnets:
-            - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetOne
-            - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetTwo
+            - !Ref PrivateSubnetOne
+            - !Ref PrivateSubnetTwo
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -216,8 +224,7 @@ Resources:
       Port: 80
       Protocol: HTTP
       UnhealthyThresholdCount: 2
-      VpcId:
-        Fn::ImportValue: !Sub ${InfrastructureStackName}:VPCId
+      VpcId: !Ref Vpc
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
