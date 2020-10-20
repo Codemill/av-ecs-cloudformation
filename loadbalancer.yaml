@@ -1,0 +1,138 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: This template will deploy a public Application Load Balancer
+  used to route traffic to the containers in the private subnets. There is also
+  a Cloud Map private DNS namespace which allows services to find each other
+  without going through the ALB. A RDS Postgres database instance will also be
+  deployed, as well as an S3 bucket containing configuration files used by the
+  services. Changes to the configuration files will notify SNS which will later
+  trigger a lambda to re-deploy the service. Finally there is a CloudWatch log
+  group which the different services will send their application logs to.
+
+Parameters:
+  ApplicationTag:
+    Type: String
+    Default: "accurate-video"
+    Description: Used to tag all resources
+    AllowedValues:
+      - "accurate-video"
+  CertificateArn:
+    Description: SSL certificate ARN in CertificateManager which covers the domain name used for the load balancer
+    Type: String
+  HostedZoneId:
+    Description: "Route53 Hosted Zone Id"
+    Type: AWS::Route53::HostedZone::Id
+  LoadBalancerDomainName:
+    Description: "Domain name that will be given to the load balancer, including a trailing dot (e.g. av.example.com.)"
+    Type: String
+  Vpc:
+    Description: "VPC ID"
+    Type: AWS::EC2::VPC::Id
+  PublicSubnetOne:
+    Description: "Public Subnet One ID"
+    Type: AWS::EC2::Subnet::Id
+  PublicSubnetTwo:
+    Description: "Public Subnet Two ID"
+    Type: AWS::EC2::Subnet::Id
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Configuration"
+        Parameters:
+          - Vpc
+          - PublicSubnetOne
+          - PublicSubnetTwo
+          - CertificateArn
+          - HostedZoneId
+          - LoadBalancerDomainName
+          - ApplicationTag
+
+Resources:
+  # A public facing load balancer, this is used for accepting traffic from the public
+  # internet and directing it to public facing microservices
+  PublicLoadBalancerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to the public facing load balancer
+      VpcId: !Ref "Vpc"
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: "tcp"
+          FromPort: 80
+          ToPort: 80
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: "tcp"
+          FromPort: 443
+          ToPort: 443
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  PublicLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: "30"
+      Subnets:
+        # The load balancer is placed into the public subnets, so that traffic
+        # from the internet can reach the load balancer directly via the internet gateway
+        - !Ref PublicSubnetOne
+        - !Ref PublicSubnetTwo
+      SecurityGroups: [!Ref "PublicLoadBalancerSG"]
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  PublicLoadBalancerListenerHttp:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - RedirectConfig:
+            Host: "#{host}"
+            Path: "/#{path}"
+            Port: "443"
+            Protocol: HTTPS
+            Query: "#{query}"
+            StatusCode: HTTP_301
+          Type: redirect
+      LoadBalancerArn: !Ref PublicLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  PublicLoadBalancerListenerHttps:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - FixedResponseConfig:
+            ContentType: text/plain
+            MessageBody: "Not implemented"
+            StatusCode: "200"
+          Type: "fixed-response"
+      LoadBalancerArn: !Ref "PublicLoadBalancer"
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: "ELBSecurityPolicy-2016-08"
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+
+  AliasRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt PublicLoadBalancer.DNSName
+        HostedZoneId: !GetAtt PublicLoadBalancer.CanonicalHostedZoneID
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref LoadBalancerDomainName
+      Type: A
+
+Outputs:
+  ExternalUrl:
+    Description: The url of the external load balancer
+    Value: !Sub http://${PublicLoadBalancer.DNSName}
+  PublicListener:
+    Description: The ARN of the public load balancer's Listener
+    Value: !Ref PublicLoadBalancerListenerHttps
+  

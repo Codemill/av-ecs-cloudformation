@@ -9,53 +9,66 @@ Parameters:
       to locate and reference resources created by that stack.
   ServiceName:
     Type: String
-    Default: av-adapter
+    Default: av-analyze
     Description: A name for the service
-  DBName:
-    Type: String
-    Default: accurateVideo
-    Description: A name for the database
   ImageRepoName:
     Type: String
-    Default: codemill-docker.jfrog.io/accurate-player/accurate-player-adapter-postgres
+    Default: codemill-docker.jfrog.io/accurate-player/accurate-analyze
     Description: The ecr repo and tag to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.3.0-rc6
+    Default: 1.2.2
     Description: The ecr repo and tag to use for image deployment
+  RegistryCredentials:
+    Type: String
+    Default: arn:aws:secretsmanager:eu-north-1:653767197116:secret:jfrog-docker-gitlabci-50X7p1
+    Description: Credentials to codemill.jfrog.io for pulling docker images
   ContainerCpu:
     Type: Number
     Default: 256
     Description: How much CPU to give the container. 1024 is 1 CPU
   ContainerMemory:
     Type: Number
-    Default: 1024
+    Default: 512
     Description: How much memory in megabytes to give the container
   Path:
     Type: String
-    Default: "/api/*"
+    Default: "/api/analyze/*"
     Description: A path on the public load balancer that this service
       should be connected to. Use * to send all load balancer
       traffic to this service.
   Priority:
     Type: Number
-    Default: 2
+    Default: 1
     Description: The priority for the routing rule added to the load balancer.
       This only applies if your have multiple services which have been
       assigned to different paths on the load balancer.
   DesiredCount:
     Type: Number
-    Default: 1
+    Default: 2
     Description: How many copies of the service task to run
-  RegistryCredentials:
-    Type: String
-    Default: arn:aws:secretsmanager:eu-north-1:653767197116:secret:jfrog-docker-gitlabci-50X7p1
-    Description: Credentials to codemill.jfrog.io for pulling docker images
   ApplicationTag:
     Type: String
     Default: "accurate-video"
     AllowedValues:
       - "accurate-video"
+
+  ApAnalyzeCacheDays:
+    Type: String
+    Default: "5"
+    Description: Number of days
+  ApAnalyzeCacheDir:
+    Type: String
+    Default: "/tmp/wav"
+    Description: ""
+  QuarkusHttpCors:
+    Type: String
+    Default: "true"
+    Description: ""
+  HttpPathPrefix:
+    Type: String
+    Default: "/api"
+    Description: ""
   Vpc:
     Description: "VPC ID"
     Type: AWS::EC2::VPC::Id
@@ -65,6 +78,10 @@ Parameters:
   PrivateSubnetTwo:
     Description: "Private Subnet Two ID"
     Type: AWS::EC2::Subnet::Id
+  PublicLoadbalancerListenerArn:
+    Description: "Public Loadbalancer Listener Arn"
+    Type: String
+
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -77,7 +94,6 @@ Metadata:
           - DesiredCount
           - Priority
           - Path
-          - DBName
       - Label:
           default: "Image configuration"
         Parameters:
@@ -85,25 +101,19 @@ Metadata:
           - ImageTag
           - RegistryCredentials
       - Label:
+          default: "...configuration"
+        Parameters:
+          - ApAnalyzeCacheDays
+          - ApAnalyzeCacheDir
+          - QuarkusHttpCors
+          - HttpPathPrefix
+      - Label:
           default: "Other"
         Parameters:
           - InfrastructureStackName
           - ApplicationTag
 
 Resources:
-  AuthRunnerSecret:
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Description: "Auth Runner secret"
-      GenerateSecretString:
-        SecretStringTemplate: '{"username": "runner"}'
-        GenerateStringKey: "password"
-        PasswordLength: 16
-        ExcludeCharacters: '"@/\'
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -120,12 +130,18 @@ Resources:
           Cpu: !Ref "ContainerCpu"
           Memory: !Ref "ContainerMemory"
           Image: !Sub ${ImageRepoName}:${ImageTag}
+          RepositoryCredentials:
+            CredentialsParameter: !Ref "RegistryCredentials"
           PortMappings:
             - ContainerPort: 8080
-            # - ContainerPort: 5700
+            - ContainerPort: 5700
             - ContainerPort: 5701
-            - ContainerPort: 5699
-            # - ContainerPort: 5702
+            - ContainerPort: 5702
+          Command:
+            - "mkdir /tmp/wav && java -jar accurate-analyze.jar"
+          EntryPoint:
+            - "sh"
+            - "-c"
           LogConfiguration:
             LogDriver: "awslogs"
             Options:
@@ -133,86 +149,16 @@ Resources:
                 Fn::ImportValue: !Sub ${InfrastructureStackName}:AVLogGroup
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
-          RepositoryCredentials:
-            CredentialsParameter: !Ref "RegistryCredentials"
+          WorkingDirectory: "/opt/"
           Environment:
-            - Name: ACL_ENABLED
-              Value: "false"
-            - Name: ACL_STORAGE_ENABLED
-              Value: "false"
-            - Name: AUTH_ENABLED
-              Value: "true"
-            - Name: AUTH_FALLBACK_USERNAME
-              Value: "false"
-            - Name: AUTH_JWT_ENABLED
-              Value: "true"
-            - Name: AUTH_JWT_ISSUER
-              Value: "https://keycloak.codemill.cloud/auth/realms/av-dev"
-            - Name: AUTH_JWT_JWK_FILENAME
-              Value: "https://keycloak.codemill.cloud/auth/realms/av-dev/protocol/openid-connect/certs"
-            - Name: AUTH_JWT_USERNAME
-              Value: "preferred_username"
-            - Name: DELETION_PHYSICAL_FILE_ENABLED
-              Value: "false"
-            - Name: QUARKUS_DATASOURCE_DRIVER
-              Value: "org.postgresql.Driver"
-            - Name: QUARKUS_DATASOURCE_URL
-              Value: !Sub
-                - "jdbc:postgresql://${DBUrl}/${dbName}"
-                - DBUrl:
-                    Fn::ImportValue: !Sub ${InfrastructureStackName}:DBEndpoint
-                  dbName: !Ref "DBName"
-            - Name: QUARKUS_FLYWAY_BASELINE-ON-MIGRATE
-              Value: "false"
-            - Name: QUARKUS_FLYWAY_MIGRATE-AT-START
-              Value: "false"
-            - Name: QUARKUS_HIBERNATE-ORM_DIALECT
-              Value: "org.hibernate.dialect.HSQLDialect"
-            - Name: QUARKUS_HIBERNATE-ORM_LOG_SQL
-              Value: "false"
+            - Name: AP_ANALYZE_CACHE_DAYS
+              Value: !Ref ApAnalyzeCacheDays
+            - Name: AP_ANALYZE_CACHE_DIR
+              Value: !Ref ApAnalyzeCacheDir
             - Name: QUARKUS_HTTP_CORS
-              Value: "true"
-            - Name: QUARKUS_LOG_LEVEL
-              Value: "INFO"
-            - Name: QUARKUS_SECURITY_USERS_FILE_ENABLED
-              Value: "false"
-            - Name: QUARKUS_VERTX_CLUSTER_HOST
-              Value: "0.0.0.0"
-            - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_HOST
-              Value: !Sub ${ServiceName}.av.local
-            - Name: QUARKUS_VERTX_CLUSTER_PORT
-              Value: 5699
-            - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_PORT
-              Value: 5699
+              Value: !Ref QuarkusHttpCors
             - Name: HTTP_PATH_PREFIX
-              Value: "/api"
-            - Name: CLUSTER_XML
-              Value: "/opt/ecs-cluster.xml"
-            - Name: CLUSTER_NAME_REGEXP
-              Value: !Sub
-                - "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
-                - ClusterName:
-                    Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
-            - Name: SERVICE_NAME_REGEXP
-              Value: !Sub
-                - "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${InfrastructureStackName}-(adapter|jobs)\\S+"
-                - ClusterName:
-                    Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
-          Secrets:
-            - Name: QUARKUS_DATASOURCE_USERNAME
-              ValueFrom: !Sub
-                - "${RDSInstanceSecretArn}:username::"
-                - RDSInstanceSecretArn:
-                    Fn::ImportValue: !Sub ${InfrastructureStackName}:RDSInstanceSecretArn
-            - Name: QUARKUS_DATASOURCE_PASSWORD
-              ValueFrom: !Sub
-                - "${RDSInstanceSecretArn}:password::"
-                - RDSInstanceSecretArn:
-                    Fn::ImportValue: !Sub ${InfrastructureStackName}:RDSInstanceSecretArn
-            - Name: AUTH_RUNNER_USERNAME
-              ValueFrom: !Sub "${AuthRunnerSecret}:username::"
-            - Name: AUTH_RUNNER_PASSWORD
-              ValueFrom: !Sub "${AuthRunnerSecret}:password::"
+              Value: !Ref HttpPathPrefix
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -235,17 +181,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - "secretsmanager:GetSecretValue"
-                Resource:
-                  - !Ref RegistryCredentials
-                  - Fn::ImportValue: !Sub ${InfrastructureStackName}:RDSInstanceSecretArn
-                  - !Ref AuthRunnerSecret
-              - Effect: Allow
-                Action:
-                  - "ecs:ListClusters"
-                  - "ecs:ListServices"
-                  - "ecs:ListTasks"
-                  - "ecs:DescribeTasks"
-                Resource: "*"
+                Resource: !Ref RegistryCredentials
               - Effect: Allow
                 Action:
                   - "logs:CreateLogStream"
@@ -270,6 +206,9 @@ Resources:
         - Key: application
           Value: !Ref ApplicationTag
 
+  # The service. The service is a resource which allows you to run multiple
+  # copies of a type of task, and gather up their logs and metrics, as well
+  # as monitor the number of running tasks and replace any that have crashed
   DiscoveryService:
     Type: AWS::ServiceDiscovery::Service
     Properties:
@@ -307,7 +246,7 @@ Resources:
       NetworkConfiguration:
         AwsvpcConfiguration:
           SecurityGroups:
-            - Fn::ImportValue: !Sub ${InfrastructureStackName}:AvAdapterSG
+            - Fn::ImportValue: !Sub ${InfrastructureStackName}:AvAnalyzeSG
           Subnets:
             - !Ref PrivateSubnetOne
             - !Ref PrivateSubnetTwo
@@ -332,7 +271,7 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       HealthCheckIntervalSeconds: 120
-      HealthCheckPath: /api/asset
+      HealthCheckPath: /api/analyze/audio/async
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 60
       HealthyThresholdCount: 2
@@ -340,7 +279,7 @@ Resources:
         - Key: deregistration_delay.timeout_seconds
           Value: "15"
       Matcher:
-        HttpCode: "200,401"
+        HttpCode: "200,401,400"
       TargetType: ip
       Name: !Ref "ServiceName"
       Port: 8080
@@ -350,6 +289,7 @@ Resources:
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
+
   # Create a rule on the load balancer for routing traffic to the target group
   LoadBalancerRule:
     Type: AWS::ElasticLoadBalancingV2::ListenerRule
@@ -360,19 +300,5 @@ Resources:
       Conditions:
         - Field: path-pattern
           Values: [!Ref "Path"]
-      ListenerArn:
-        Fn::ImportValue: !Sub ${InfrastructureStackName}:PublicListener
+      ListenerArn: !Ref PublicLoadbalancerListenerArn
       Priority: !Ref "Priority"
-
-Outputs:
-  AuthRunnerSecretArn:
-    Description: Secrets Manager Secret ARN for Auth Runner
-    Value: !Ref "AuthRunnerSecret"
-    Export:
-      Name: !Sub ${AWS::StackName}:AuthRunnerSecretArn
-
-  ServiceName:
-    Description: Service name
-    Value: !GetAtt "DiscoveryService.Name"
-    Export:
-      Name: !Sub ${AWS::StackName}:DiscoveryServiceName

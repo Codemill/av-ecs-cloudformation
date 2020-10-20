@@ -17,7 +17,7 @@ Parameters:
     Description: The repo and tag to use for image deployment
   ImageTag:
     Type: String
-    Default: v4.2.2-rc.0
+    Default: 4.3.2›
     Description: The ecr repo and tag to use for image deployment
   ContainerCpu:
     Type: Number
@@ -61,6 +61,9 @@ Parameters:
   PrivateSubnetTwo:
     Description: "Private Subnet Two ID"
     Type: AWS::EC2::Subnet::Id
+  PublicLoadbalancerListenerArn:
+    Description: "Public Loadbalancer Listener Arn"
+    Type: String
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -155,7 +158,7 @@ Resources:
                   - "logs:CreateLogStream"
                   - "logs:PutLogEvents"
                 Resource:
-                  - !Sub 
+                  - !Sub
                     - arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}:*
                     - LogGroupName:
                         Fn::ImportValue: !Sub ${InfrastructureStackName}:AVLogGroup
@@ -164,9 +167,9 @@ Resources:
                   - "s3:GetObject"
                 Resource:
                   - !Sub
-                      - arn:aws:s3:::${ConfigBucketName}/*
-                      - ConfigBucketName:
-                          Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
+                    - arn:aws:s3:::${ConfigBucketName}/*
+                    - ConfigBucketName:
+                        Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -239,8 +242,7 @@ Resources:
       Conditions:
         - Field: path-pattern
           Values: [!Ref "Path"]
-      ListenerArn:
-        Fn::ImportValue: !Sub ${InfrastructureStackName}:PublicListener
+      ListenerArn: !Ref PublicLoadbalancerListenerArn
       Priority: !Ref "Priority"
 
   UpdateServiceLambdaFunction:
@@ -320,9 +322,9 @@ Resources:
                   - ecs:UpdateService
                 Resource:
                   - !Sub
-                      - arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${Service.Name}
-                      - ClusterName:
-                          Fn::ImportValue: !Sub "${InfrastructureStackName}:ClusterName"
+                    - arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${Service.Name}
+                    - ClusterName:
+                        Fn::ImportValue: !Sub "${InfrastructureStackName}:ClusterName"
       Tags:
         - Key: application
           Value: !Ref ApplicationTag

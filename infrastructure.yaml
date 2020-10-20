@@ -1,11 +1,11 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: This template will deploy a public Application Load Balancer
   used to route traffic to the containers in the private subnets. There is also
-  a Cloud Map private DNS namespace which allows services to find each other 
-  without going through the ALB. A RDS Postgres database instance will also be 
-  deployed, as well as an S3 bucket containing configuration files used by the 
-  services. Changes to the configuration files will notify SNS which will later 
-  trigger a lambda to re-deploy the service. Finally there is a CloudWatch log 
+  a Cloud Map private DNS namespace which allows services to find each other
+  without going through the ALB. A RDS Postgres database instance will also be
+  deployed, as well as an S3 bucket containing configuration files used by the
+  services. Changes to the configuration files will notify SNS which will later
+  trigger a lambda to re-deploy the service. Finally there is a CloudWatch log
   group which the different services will send their application logs to.
 
 Parameters:
@@ -35,31 +35,19 @@ Parameters:
     Description: Used to tag all resources
     AllowedValues:
       - "accurate-video"
-  CertificateArn:
-    Description: SSL certificate ARN in CertificateManager which covers the domain name used for the load balancer 
-    Type: String
-  HostedZoneName:
-    Description: "Domain name of the hosted zone, including a trailing dot (e.g. example.com.)"
-    Type: String
-  LoadBalancerDomainName:
-    Description: "Domain name that will be given to the load balancer, including a trailing dot (e.g. av.example.com.)"
-    Type: String
   Vpc:
     Description: "VPC ID"
     Type: AWS::EC2::VPC::Id
-  PublicSubnetOne:
-    Description: "Public Subnet One ID"
-    Type: AWS::EC2::Subnet::Id
-  PublicSubnetTwo:
-    Description: "Public Subnet Two ID"
-    Type: AWS::EC2::Subnet::Id
   PrivateSubnetOne:
     Description: "Private Subnet One ID"
     Type: AWS::EC2::Subnet::Id
   PrivateSubnetTwo:
     Description: "Private Subnet Two ID"
     Type: AWS::EC2::Subnet::Id
-    
+  PublicLoadBalancerSG:
+    Description: "Public Loadbalancer Security Group"
+    Type: AWS::EC2::SecurityGroup::Id
+
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -74,12 +62,13 @@ Metadata:
           default: "ECS cluster configuration"
         Parameters:
           - ClusterName
+          - Vpc
+          - PrivateSubnetOne
+          - PrivateSubnetTwo
+          - PublicLoadBalancerSG
       - Label:
           default: "Other"
         Parameters:
-          - CertificateArn
-          - HostedZoneName
-          - LoadBalancerDomainName
           - ApplicationTag
 
 Resources:
@@ -108,10 +97,10 @@ Resources:
   RDSInstanceSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Description: 'RDS instance secret'
+      Description: "RDS instance secret"
       GenerateSecretString:
         SecretStringTemplate: !Sub '{"username": "${DBUser}"}'
-        GenerateStringKey: 'password'
+        GenerateStringKey: "password"
         PasswordLength: 16
         ExcludeCharacters: '"@/\'
       Tags:
@@ -122,15 +111,15 @@ Resources:
     Type: AWS::RDS::DBInstance
     Properties:
       AllocatedStorage: !Ref "DBAllocatedStorage"
-      # BackupRetentionPeriod: 
+      # BackupRetentionPeriod:
       DBInstanceClass: !Ref "DBClass"
       DBName: !Ref "DBName"
       DBSubnetGroupName: !Ref "DBSubnetGroup"
       DeletionProtection: true
       Engine: Postgres
-      MasterUsername: !Sub '{{resolve:secretsmanager:${RDSInstanceSecret}::username}}'
-      MasterUserPassword: !Sub '{{resolve:secretsmanager:${RDSInstanceSecret}::password}}'
-      # MaxAllocatedStorage: 
+      MasterUsername: !Sub "{{resolve:secretsmanager:${RDSInstanceSecret}::username}}"
+      MasterUserPassword: !Sub "{{resolve:secretsmanager:${RDSInstanceSecret}::password}}"
+      # MaxAllocatedStorage:
       MultiAZ: true
       # PreferredBackupWindow: hh24:mi-hh24:mi
       # PreferredMaintenanceWindow: ddd:hh24:mi-ddd:hh24:mi
@@ -156,7 +145,7 @@ Resources:
 
   RdsDatabaseSgIngress:
     Type: AWS::EC2::SecurityGroupIngress
-    Properties: 
+    Properties:
       Description: Access from Adapter service
       IpProtocol: "tcp"
       FromPort: 5432
@@ -175,7 +164,7 @@ Resources:
 
   AdapterSgIngressALB:
     Type: AWS::EC2::SecurityGroupIngress
-    Properties: 
+    Properties:
       Description: Access from the public ALB
       IpProtocol: "tcp"
       FromPort: 8080
@@ -185,7 +174,7 @@ Resources:
 
   AdapterSgIngressJobs:
     Type: AWS::EC2::SecurityGroupIngress
-    Properties: 
+    Properties:
       Description: Access from the Jobs service
       IpProtocol: "tcp"
       FromPort: 8080
@@ -195,7 +184,7 @@ Resources:
 
   AdapterSgIngressJobsHazelcast:
     Type: AWS::EC2::SecurityGroupIngress
-    Properties: 
+    Properties:
       Description: Access from the Jobs service
       IpProtocol: "tcp"
       FromPort: 5699
@@ -205,7 +194,7 @@ Resources:
 
   AdapterSgIngressAdapterHazelcast:
     Type: AWS::EC2::SecurityGroupIngress
-    Properties: 
+    Properties:
       Description: Access from the Jobs service
       IpProtocol: "tcp"
       FromPort: 5699
@@ -224,14 +213,14 @@ Resources:
 
   AvFrontendSgIngress:
     Type: AWS::EC2::SecurityGroupIngress
-    Properties: 
+    Properties:
       Description: Access from the public ALB
       IpProtocol: "tcp"
       FromPort: 80
       ToPort: 80
       SourceSecurityGroupId: !Ref "PublicLoadBalancerSG"
       GroupId: !Ref AvFrontendSG
-  
+
   AvAnalyzeSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -243,7 +232,7 @@ Resources:
 
   AvAnalyzeSgIngress:
     Type: AWS::EC2::SecurityGroupIngress
-    Properties: 
+    Properties:
       Description: Access from the public ALB
       IpProtocol: "tcp"
       FromPort: 8080
@@ -262,7 +251,7 @@ Resources:
 
   JobsSgIngressAdapterHazelcast:
     Type: AWS::EC2::SecurityGroupIngress
-    Properties: 
+    Properties:
       Description: Access from the Adapter service
       IpProtocol: "tcp"
       FromPort: 5699
@@ -272,7 +261,7 @@ Resources:
 
   JobsSgIngressJobsHazelcast:
     Type: AWS::EC2::SecurityGroupIngress
-    Properties: 
+    Properties:
       Description: Access from the Jobs service
       IpProtocol: "tcp"
       FromPort: 5699
@@ -289,88 +278,6 @@ Resources:
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
-
-  ################################ ALB ################################
-  #####################################################################
-
-  # A public facing load balancer, this is used for accepting traffic from the public
-  # internet and directing it to public facing microservices
-  PublicLoadBalancerSG:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Access to the public facing load balancer
-      VpcId: !Ref "Vpc"
-      SecurityGroupIngress:
-        - CidrIp: 0.0.0.0/0
-          IpProtocol: "tcp"
-          FromPort: 80
-          ToPort: 80
-        - CidrIp: 0.0.0.0/0
-          IpProtocol: "tcp"
-          FromPort: 443
-          ToPort: 443
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-
-  PublicLoadBalancer:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    Properties:
-      Scheme: internet-facing
-      LoadBalancerAttributes:
-        - Key: idle_timeout.timeout_seconds
-          Value: "30"
-      Subnets:
-        # The load balancer is placed into the public subnets, so that traffic
-        # from the internet can reach the load balancer directly via the internet gateway
-        - !Ref PublicSubnetOne
-        - !Ref PublicSubnetTwo
-      SecurityGroups: [!Ref "PublicLoadBalancerSG"]
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag 
-
-  PublicLoadBalancerListenerHttp:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      DefaultActions:
-        - RedirectConfig:
-            Host: '#{host}'
-            Path: '/#{path}'
-            Port: "443"
-            Protocol: HTTPS
-            Query: '#{query}'
-            StatusCode: HTTP_301
-          Type: redirect
-      LoadBalancerArn: !Ref PublicLoadBalancer
-      Port: 80
-      Protocol: HTTP
-
-  PublicLoadBalancerListenerHttps:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      DefaultActions:
-        - FixedResponseConfig:
-            ContentType: text/plain
-            MessageBody: "Not implemented"
-            StatusCode: "200"
-          Type: "fixed-response"
-      LoadBalancerArn: !Ref "PublicLoadBalancer"
-      Port: 443
-      Protocol: HTTPS
-      SslPolicy: "ELBSecurityPolicy-2016-08"
-      Certificates:
-        - CertificateArn: !Ref CertificateArn
-
-  AliasRecord:
-    Type: AWS::Route53::RecordSet
-    Properties: 
-      AliasTarget: 
-        DNSName: !GetAtt PublicLoadBalancer.DNSName
-        HostedZoneId: !GetAtt PublicLoadBalancer.CanonicalHostedZoneID
-      HostedZoneName: !Ref HostedZoneName
-      Name: !Ref LoadBalancerDomainName
-      Type: A
 
   ######################## CloudWatch Log Group #######################
   #####################################################################
@@ -390,13 +297,13 @@ Resources:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
       NotificationConfiguration:
-        TopicConfigurations: 
+        TopicConfigurations:
           - Event: s3:ObjectCreated:*
-            Filter: 
-                S3Key: 
-                  Rules: 
-                    - Name: prefix
-                      Value: frontend
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: frontend
             Topic: !Ref FrontendSettingsUpdatedTopic
       Tags:
         - Key: application
@@ -413,22 +320,22 @@ Resources:
 
   FrontendSettingsUpdatedTopicPolicy:
     Type: AWS::SNS::TopicPolicy
-    Properties: 
+    Properties:
       PolicyDocument:
-        Version: '2012-10-17'
+        Version: "2012-10-17"
         Statement:
           - Effect: Allow
-            Principal: 
+            Principal:
               Service: s3.amazonaws.com
-            Resource: 
+            Resource:
               - !Ref FrontendSettingsUpdatedTopic
             Action: sns:Publish
             Condition:
               StringEquals:
                 AWS:SourceAccount: !Ref AWS::AccountId
-      Topics: 
+      Topics:
         - !Ref FrontendSettingsUpdatedTopic
-        
+
 # These are the values output by the CloudFormation template. Be careful
 # about changing any of them, because of them are exported with specific
 # names so that the other task related CF templates can use them.
@@ -458,16 +365,6 @@ Outputs:
     Value: !GetAtt "DBInstance.Endpoint.Address"
     Export:
       Name: !Sub ${AWS::StackName}:DBEndpoint
-  ExternalUrl:
-    Description: The url of the external load balancer
-    Value: !Sub http://${PublicLoadBalancer.DNSName}
-    Export:
-      Name: !Sub ${AWS::StackName}:ExternalUrl
-  PublicListener:
-    Description: The ARN of the public load balancer's Listener
-    Value: !Ref PublicLoadBalancerListenerHttps
-    Export:
-      Name: !Sub ${AWS::StackName}:PublicListener
   PrivateNamespace:
     Description: Private DNS namespace
     Value: !Ref "PrivateDNSNamespace"
