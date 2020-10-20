@@ -206,7 +206,7 @@ Resources:
             - Name: CLUSTER_NAME_REGEXP
               Value: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
             - Name: SERVICE_NAME_REGEXP
-              Value: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${InfrastructureStackName}-(adapter|jobs)\\S+"
+              Value: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/\\S+-(jobs|adapter)-\\S+"
           Secrets:
             - Name: AP_ADAPTER_USERNAME
               ValueFrom: !Sub
