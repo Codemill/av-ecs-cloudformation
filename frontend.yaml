@@ -64,6 +64,9 @@ Parameters:
   PublicLoadbalancerListenerArn:
     Description: "Public Loadbalancer Listener Arn"
     Type: String
+  ClusterName:
+    Description: "ECS cluster name"
+    Type: String
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -181,8 +184,7 @@ Resources:
     Type: AWS::ECS::Service
     DependsOn: LoadBalancerRule
     Properties:
-      Cluster:
-        Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
+      Cluster: !Ref ClusterName
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 75
@@ -265,8 +267,7 @@ Resources:
           };
       Environment:
         Variables:
-          CLUSTER_NAME:
-            Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
+          CLUSTER_NAME: !Ref ClusterName
           SERVICE_NAME: !Ref Service
       Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
@@ -321,10 +322,7 @@ Resources:
                 Action:
                   - ecs:UpdateService
                 Resource:
-                  - !Sub
-                    - arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${Service.Name}
-                    - ClusterName:
-                        Fn::ImportValue: !Sub "${InfrastructureStackName}:ClusterName"
+                  - !Sub arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${Service.Name}
       Tags:
         - Key: application
           Value: !Ref ApplicationTag

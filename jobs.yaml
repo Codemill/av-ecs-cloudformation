@@ -84,6 +84,10 @@ Parameters:
   PrivateSubnetTwo:
     Description: "Private Subnet Two ID"
     Type: AWS::EC2::Subnet::Id
+  ClusterName:
+    Description: "ECS cluster name"
+    Type: String
+
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -199,15 +203,9 @@ Resources:
             - Name: CLUSTER_XML
               Value: "/opt/ecs-cluster.xml"
             - Name: CLUSTER_NAME_REGEXP
-              Value: !Sub
-                - "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
-                - ClusterName:
-                    Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
+              Value: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
             - Name: SERVICE_NAME_REGEXP
-              Value: !Sub
-                - "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${InfrastructureStackName}-(adapter|jobs)\\S+"
-                - ClusterName:
-                    Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
+              Value: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${InfrastructureStackName}-(adapter|jobs)\\S+"
           Secrets:
             - Name: AP_ADAPTER_USERNAME
               ValueFrom: !Sub
@@ -301,8 +299,7 @@ Resources:
   Service:
     Type: AWS::ECS::Service
     Properties:
-      Cluster:
-        Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
+      Cluster: !Ref ClusterName
       LaunchType: FARGATE
       DeploymentConfiguration:
         MaximumPercent: 200

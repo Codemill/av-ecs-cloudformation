@@ -81,7 +81,9 @@ Parameters:
   PublicLoadbalancerListenerArn:
     Description: "Public Loadbalancer Listener Arn"
     Type: String
-
+  ClusterName:
+    Description: "ECS cluster name"
+    Type: String
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -236,8 +238,7 @@ Resources:
     Type: AWS::ECS::Service
     DependsOn: LoadBalancerRule
     Properties:
-      Cluster:
-        Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
+      Cluster: !Ref ClusterName
       LaunchType: FARGATE
       DeploymentConfiguration:
         MaximumPercent: 200
