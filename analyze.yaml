@@ -3,22 +3,26 @@ Description: Deploy a service on AWS Fargate, hosted in a private subnet, but ac
 Parameters:
   InfrastructureStackName:
     Type: String
-    Default: av-ecs
+    Default: av-infrastructure
     Description:
       The name of the parent Fargate networking stack that you created. Necessary
       to locate and reference resources created by that stack.
   ServiceName:
     Type: String
-    Default: av-frontend
+    Default: av-analyze
     Description: A name for the service
   ImageRepoName:
     Type: String
-    Default: codemill-docker.jfrog.io/accurate-player/accurate-player-qc
-    Description: The repo and tag to use for image deployment
+    Default: codemill-docker.jfrog.io/accurate-player/accurate-analyze
+    Description: The ecr repo and tag to use for image deployment
   ImageTag:
     Type: String
-    Default: v4.2.2-rc.0
+    Default: 1.2.2
     Description: The ecr repo and tag to use for image deployment
+  RegistryCredentials:
+    Type: String
+    Default: arn:aws:secretsmanager:eu-north-1:653767197116:secret:jfrog-docker-gitlabci-50X7p1
+    Description: Credentials to codemill.jfrog.io for pulling docker images
   ContainerCpu:
     Type: Number
     Default: 256
@@ -29,13 +33,13 @@ Parameters:
     Description: How much memory in megabytes to give the container
   Path:
     Type: String
-    Default: "*"
+    Default: "/api/analyze/*"
     Description: A path on the public load balancer that this service
       should be connected to. Use * to send all load balancer
       traffic to this service.
   Priority:
     Type: Number
-    Default: 3
+    Default: 1
     Description: The priority for the routing rule added to the load balancer.
       This only applies if your have multiple services which have been
       assigned to different paths on the load balancer.
@@ -43,16 +47,41 @@ Parameters:
     Type: Number
     Default: 2
     Description: How many copies of the service task to run
-  RegistryCredentials:
-    Type: String
-    Default: arn:aws:secretsmanager:eu-north-1:653767197116:secret:jfrog-docker-gitlabci-50X7p1
-    Description: Credentials to codemill.jfrog.io for pulling docker images
   ApplicationTag:
     Type: String
     Default: "accurate-video"
-    AllowedValues:
-      - "accurate-video"
-
+  ApAnalyzeCacheDays:
+    Type: String
+    Default: "5"
+    Description: Number of days
+  ApAnalyzeCacheDir:
+    Type: String
+    Default: "/tmp/wav"
+    Description: ""
+  QuarkusHttpCors:
+    Type: String
+    Default: "true"
+    Description: ""
+  HttpPathPrefix:
+    Type: String
+    Default: "/api"
+    Description: ""
+  Vpc:
+    Description: "VPC ID"
+    Type: AWS::EC2::VPC::Id
+  PrivateSubnetOne:
+    Description: "Private Subnet One ID"
+    Type: AWS::EC2::Subnet::Id
+  PrivateSubnetTwo:
+    Description: "Private Subnet Two ID"
+    Type: AWS::EC2::Subnet::Id
+  PublicLoadbalancerListenerArn:
+    Description: "Public Loadbalancer Listener Arn"
+    Type: String
+  ClusterName:
+    Description: "ECS cluster name"
+    Type: String
+    Default: av-cluster
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -72,13 +101,18 @@ Metadata:
           - ImageTag
           - RegistryCredentials
       - Label:
+          default: "...configuration"
+        Parameters:
+          - ApAnalyzeCacheDays
+          - ApAnalyzeCacheDir
+          - QuarkusHttpCors
+          - HttpPathPrefix
+      - Label:
           default: "Other"
         Parameters:
           - InfrastructureStackName
           - ApplicationTag
 
-# The task definition. This is a simple metadata description of what
-# container to run, and what resource requirements it has.
 Resources:
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
@@ -96,15 +130,15 @@ Resources:
           Cpu: !Ref "ContainerCpu"
           Memory: !Ref "ContainerMemory"
           Image: !Sub ${ImageRepoName}:${ImageTag}
+          RepositoryCredentials:
+            CredentialsParameter: !Ref "RegistryCredentials"
+          PortMappings:
+            - ContainerPort: 8080
+            - ContainerPort: 5700
+            - ContainerPort: 5701
+            - ContainerPort: 5702
           Command:
-            - !Sub
-              - |
-                apk add aws-cli; \
-                aws s3 cp s3://${ConfigBucketName}/frontend/settings.js /usr/share/nginx/html/assets/json/settings.js; \
-                aws s3 cp s3://${ConfigBucketName}/frontend/keycloak.json /usr/share/nginx/html/assets/json/keycloak.json; \
-                nginx -g 'daemon off;';
-              - ConfigBucketName:
-                  Fn::ImportValue: !Sub ${InfrastructureStackName}:ConfigBucketName
+            - "mkdir /tmp/wav && java -jar accurate-analyze.jar"
           EntryPoint:
             - "sh"
             - "-c"
@@ -115,10 +149,16 @@ Resources:
                 Fn::ImportValue: !Sub ${InfrastructureStackName}:AVLogGroup
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
-          RepositoryCredentials:
-            CredentialsParameter: !Ref "RegistryCredentials"
-          PortMappings:
-            - ContainerPort: 80
+          WorkingDirectory: "/opt/"
+          Environment:
+            - Name: AP_ANALYZE_CACHE_DAYS
+              Value: !Ref ApAnalyzeCacheDays
+            - Name: AP_ANALYZE_CACHE_DIR
+              Value: !Ref ApAnalyzeCacheDir
+            - Name: QUARKUS_HTTP_CORS
+              Value: !Ref QuarkusHttpCors
+            - Name: HTTP_PATH_PREFIX
+              Value: !Ref HttpPathPrefix
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -147,18 +187,44 @@ Resources:
                   - "logs:CreateLogStream"
                   - "logs:PutLogEvents"
                 Resource:
-                  - !Sub 
+                  - !Sub
                     - arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}:*
                     - LogGroupName:
                         Fn::ImportValue: !Sub ${InfrastructureStackName}:AVLogGroup
               - Effect: Allow
                 Action:
+                  - "s3:ListBucket"
+                  - "s3:HeadObject"
                   - "s3:GetObject"
-                Resource:
+                  - "s3:PutObject"
+                NotResource:
                   - !Sub
-                      - arn:aws:s3:::${ConfigBucketName}/*
-                      - ConfigBucketName:
-                          Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
+                    - arn:aws:s3:::${ConfigBucketName}/*
+                    - ConfigBucketName:
+                        Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  # The service. The service is a resource which allows you to run multiple
+  # copies of a type of task, and gather up their logs and metrics, as well
+  # as monitor the number of running tasks and replace any that have crashed
+  DiscoveryService:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Description: Discovery Service for the Demo Application
+      DnsConfig:
+        RoutingPolicy: MULTIVALUE
+        DnsRecords:
+          - TTL: 60
+            Type: A
+          - TTL: 60
+            Type: SRV
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+      Name: !Ref "ServiceName"
+      NamespaceId:
+        Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateDNSNamespace
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -170,30 +236,30 @@ Resources:
     Type: AWS::ECS::Service
     DependsOn: LoadBalancerRule
     Properties:
-      Cluster:
-        Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
+      Cluster: !Ref ClusterName
+      LaunchType: FARGATE
       DeploymentConfiguration:
         MaximumPercent: 200
         MinimumHealthyPercent: 75
-      DeploymentController:
-        Type: ECS
       DesiredCount: !Ref "DesiredCount"
-      LaunchType: FARGATE
-      LoadBalancers:
-        - ContainerName: !Ref "ServiceName"
-          ContainerPort: 80
-          TargetGroupArn: !Ref "TargetGroup"
       NetworkConfiguration:
         AwsvpcConfiguration:
           SecurityGroups:
-            - Fn::ImportValue: !Sub ${InfrastructureStackName}:AvFrontendSG
+            - Fn::ImportValue: !Sub ${InfrastructureStackName}:AvAnalyzeSG
           Subnets:
-            - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetOne
-            - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetTwo
+            - !Ref PrivateSubnetOne
+            - !Ref PrivateSubnetTwo
+      TaskDefinition: !Ref "TaskDefinition"
+      LoadBalancers:
+        - ContainerName: !Ref "ServiceName"
+          ContainerPort: 8080
+          TargetGroupArn: !Ref "TargetGroup"
+      ServiceRegistries:
+        - RegistryArn: !GetAtt DiscoveryService.Arn
+          Port: 8080
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
-      TaskDefinition: !Ref "TaskDefinition"
 
   # A target group. This is used for keeping track of all the tasks, and
   # what IP addresses / port numbers they have. You can query it yourself,
@@ -204,20 +270,21 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       HealthCheckIntervalSeconds: 120
-      HealthCheckPath: /
+      HealthCheckPath: /api/analyze/audio/async
       HealthCheckProtocol: HTTP
       HealthCheckTimeoutSeconds: 60
       HealthyThresholdCount: 2
-      TargetType: ip
       TargetGroupAttributes:
         - Key: deregistration_delay.timeout_seconds
           Value: "15"
+      Matcher:
+        HttpCode: "200,401,400"
+      TargetType: ip
       Name: !Ref "ServiceName"
-      Port: 80
+      Port: 8080
       Protocol: HTTP
       UnhealthyThresholdCount: 2
-      VpcId:
-        Fn::ImportValue: !Sub ${InfrastructureStackName}:VPCId
+      VpcId: !Ref Vpc
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -232,90 +299,5 @@ Resources:
       Conditions:
         - Field: path-pattern
           Values: [!Ref "Path"]
-      ListenerArn:
-        Fn::ImportValue: !Sub ${InfrastructureStackName}:PublicListener
+      ListenerArn: !Ref PublicLoadbalancerListenerArn
       Priority: !Ref "Priority"
-
-  UpdateServiceLambdaFunction:
-    Type: "AWS::Lambda::Function"
-    Properties:
-      Code:
-        ZipFile: |
-          const AWS = require('aws-sdk');
-          const ecs = new AWS.ECS();
-          exports.handler = function(event, context, callback) {
-            var params = {
-              service: process.env.SERVICE_NAME, 
-              cluster: process.env.CLUSTER_NAME,
-              forceNewDeployment: true
-            };
-            ecs.updateService(params, function(err, data) {
-              if (err) console.log(err, err.stack); // an error occurred
-              else     console.log(data);           // successful response
-            });
-          };
-      Environment:
-        Variables:
-          CLUSTER_NAME:
-            Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
-          SERVICE_NAME: !Ref Service
-      Handler: index.handler
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Runtime: nodejs12.x
-      Timeout: 5
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-
-  ConfigSubscription:
-    Type: AWS::SNS::Subscription
-    Properties:
-      Endpoint: !GetAtt UpdateServiceLambdaFunction.Arn
-      Protocol: lambda
-      TopicArn:
-        Fn::ImportValue: !Sub "${InfrastructureStackName}:FrontendSettingsUpdatedTopicArn"
-
-  LambdaPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Ref UpdateServiceLambdaFunction
-      Principal: sns.amazonaws.com
-      SourceArn:
-        Fn::ImportValue: !Sub "${InfrastructureStackName}:FrontendSettingsUpdatedTopicArn"
-
-  LambdaExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - lambda.amazonaws.com
-            Action:
-              - sts:AssumeRole
-      Path: "/"
-      Policies:
-        - PolicyName: root
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: arn:aws:logs:*:*:*
-              - Effect: Allow
-                Action:
-                  - ecs:UpdateService
-                Resource:
-                  - !Sub
-                      - arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${Service.Name}
-                      - ClusterName:
-                          Fn::ImportValue: !Sub "${InfrastructureStackName}:ClusterName"
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag

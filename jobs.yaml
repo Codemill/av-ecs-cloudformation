@@ -3,7 +3,7 @@ Description: Deploy a service on AWS Fargate, hosted in a private subnet
 Parameters:
   InfrastructureStackName:
     Type: String
-    Default: av-ecs
+    Default: av-infrastructure
     Description:
       The name of the parent Fargate networking stack that you created. Necessary
       to locate and reference resources created by that stack.
@@ -22,7 +22,7 @@ Parameters:
     Description: The docker image repo to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.3.0-rc6
+    Default: 4.3.2
     Description: The docker image tag to use for image deployment
   RegistryCredentials:
     Type: String
@@ -44,8 +44,6 @@ Parameters:
     Type: String
     Default: "accurate-video"
     Description: Used to tag all resources
-    AllowedValues:
-      - "accurate-video"
   BlackFrameLocation:
     Type: String
     Default: "s3://av-black-frame-codemill/black25.mp4"
@@ -78,6 +76,16 @@ Parameters:
     Type: String
     Default: ""
     Description: Will use default queue if not configured
+  PrivateSubnetOne:
+    Description: "Private Subnet One ID"
+    Type: AWS::EC2::Subnet::Id
+  PrivateSubnetTwo:
+    Description: "Private Subnet Two ID"
+    Type: AWS::EC2::Subnet::Id
+  ClusterName:
+    Description: "ECS cluster name"
+    Type: String
+    Default: av-cluster
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -194,15 +202,9 @@ Resources:
             - Name: CLUSTER_XML
               Value: "/opt/ecs-cluster.xml"
             - Name: CLUSTER_NAME_REGEXP
-              Value: !Sub
-                - "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
-                - ClusterName:
-                    Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
+              Value: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
             - Name: SERVICE_NAME_REGEXP
-              Value: !Sub
-                - "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${InfrastructureStackName}-(adapter|jobs)\\S+"
-                - ClusterName:
-                    Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
+              Value: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/\\S+-(jobs|adapter)-\\S+"
           Secrets:
             - Name: AP_ADAPTER_USERNAME
               ValueFrom: !Sub
@@ -269,7 +271,7 @@ Resources:
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
-          
+
   DiscoveryService:
     Type: AWS::ServiceDiscovery::Service
     Properties:
@@ -290,15 +292,13 @@ Resources:
         - Key: application
           Value: !Ref ApplicationTag
 
-
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
   # as monitor the number of running tasks and replace any that have crashed
   Service:
     Type: AWS::ECS::Service
     Properties:
-      Cluster:
-        Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
+      Cluster: !Ref ClusterName
       LaunchType: FARGATE
       DeploymentConfiguration:
         MaximumPercent: 200
@@ -312,8 +312,8 @@ Resources:
           SecurityGroups:
             - Fn::ImportValue: !Sub ${InfrastructureStackName}:AvJobsSG
           Subnets:
-            - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetOne
-            - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetTwo
+            - !Ref PrivateSubnetOne
+            - !Ref PrivateSubnetTwo
       TaskDefinition: !Ref "TaskDefinition"
       Tags:
         - Key: application

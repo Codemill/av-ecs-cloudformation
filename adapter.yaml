@@ -3,7 +3,7 @@ Description: Deploy a service on AWS Fargate, hosted in a private subnet, but ac
 Parameters:
   InfrastructureStackName:
     Type: String
-    Default: av-ecs
+    Default: av-infrastructure
     Description:
       The name of the parent Fargate networking stack that you created. Necessary
       to locate and reference resources created by that stack.
@@ -21,7 +21,7 @@ Parameters:
     Description: The ecr repo and tag to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.3.0-rc6
+    Default: 4.3.2
     Description: The ecr repo and tag to use for image deployment
   ContainerCpu:
     Type: Number
@@ -54,8 +54,22 @@ Parameters:
   ApplicationTag:
     Type: String
     Default: "accurate-video"
-    AllowedValues:
-      - "accurate-video"
+  Vpc:
+    Description: "VPC ID"
+    Type: AWS::EC2::VPC::Id
+  PrivateSubnetOne:
+    Description: "Private Subnet One ID"
+    Type: AWS::EC2::Subnet::Id
+  PrivateSubnetTwo:
+    Description: "Private Subnet Two ID"
+    Type: AWS::EC2::Subnet::Id
+  PublicLoadbalancerListenerArn:
+    Description: "Public Loadbalancer Listener Arn"
+    Type: String
+  ClusterName:
+    Description: "ECS cluster name"
+    Type: String
+    Default: av-cluster
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -80,6 +94,10 @@ Metadata:
           default: "Other"
         Parameters:
           - InfrastructureStackName
+          - Vpc
+          - PrivateSubnetOne
+          - PrivateSubnetTwo
+          - PublicLoadbalancerListenerArn
           - ApplicationTag
 
 Resources:
@@ -114,10 +132,8 @@ Resources:
           Image: !Sub ${ImageRepoName}:${ImageTag}
           PortMappings:
             - ContainerPort: 8080
-            # - ContainerPort: 5700
             - ContainerPort: 5701
             - ContainerPort: 5699
-            # - ContainerPort: 5702
           LogConfiguration:
             LogDriver: "awslogs"
             Options:
@@ -173,23 +189,18 @@ Resources:
             - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_HOST
               Value: !Sub ${ServiceName}.av.local
             - Name: QUARKUS_VERTX_CLUSTER_PORT
-              Value: 5699
+              Value: "5699"
             - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_PORT
-              Value: 5699
+              Value: "5699"
             - Name: HTTP_PATH_PREFIX
               Value: "/api"
             - Name: CLUSTER_XML
               Value: "/opt/ecs-cluster.xml"
             - Name: CLUSTER_NAME_REGEXP
-              Value: !Sub
-                - "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
-                - ClusterName:
-                    Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
+              Value: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
             - Name: SERVICE_NAME_REGEXP
-              Value: !Sub
-                - "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${InfrastructureStackName}-(adapter|jobs)\\S+"
-                - ClusterName:
-                    Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
+              Value: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/\\S+-(jobs|adapter)-\\S+"
+
           Secrets:
             - Name: QUARKUS_DATASOURCE_USERNAME
               ValueFrom: !Sub
@@ -289,8 +300,7 @@ Resources:
     Type: AWS::ECS::Service
     DependsOn: LoadBalancerRule
     Properties:
-      Cluster:
-        Fn::ImportValue: !Sub ${InfrastructureStackName}:ClusterName
+      Cluster: !Ref ClusterName
       LaunchType: FARGATE
       DeploymentConfiguration:
         MaximumPercent: 200
@@ -301,8 +311,8 @@ Resources:
           SecurityGroups:
             - Fn::ImportValue: !Sub ${InfrastructureStackName}:AvAdapterSG
           Subnets:
-            - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetOne
-            - Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateSubnetTwo
+            - !Ref PrivateSubnetOne
+            - !Ref PrivateSubnetTwo
       TaskDefinition: !Ref "TaskDefinition"
       LoadBalancers:
         - ContainerName: !Ref "ServiceName"
@@ -338,8 +348,7 @@ Resources:
       Port: 8080
       Protocol: HTTP
       UnhealthyThresholdCount: 2
-      VpcId:
-        Fn::ImportValue: !Sub ${InfrastructureStackName}:VPCId
+      VpcId: !Ref Vpc
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -353,8 +362,7 @@ Resources:
       Conditions:
         - Field: path-pattern
           Values: [!Ref "Path"]
-      ListenerArn:
-        Fn::ImportValue: !Sub ${InfrastructureStackName}:PublicListener
+      ListenerArn: !Ref PublicLoadbalancerListenerArn
       Priority: !Ref "Priority"
 
 Outputs:
