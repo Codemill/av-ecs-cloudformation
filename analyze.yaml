@@ -50,9 +50,6 @@ Parameters:
   ApplicationTag:
     Type: String
     Default: "accurate-video"
-    AllowedValues:
-      - "accurate-video"
-
   ApAnalyzeCacheDays:
     Type: String
     Default: "5"

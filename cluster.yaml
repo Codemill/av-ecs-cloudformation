@@ -9,8 +9,6 @@ Parameters:
     Type: String
     Default: "accurate-video"
     Description: Used to tag all resources
-    AllowedValues:
-      - "accurate-video"
 
 Metadata:
   AWS::CloudFormation::Interface:

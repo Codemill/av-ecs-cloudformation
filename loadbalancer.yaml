@@ -7,8 +7,6 @@ Parameters:
     Type: String
     Default: "accurate-video"
     Description: Used to tag all resources
-    AllowedValues:
-      - "accurate-video"
   CertificateArn:
     Description: SSL certificate ARN in CertificateManager which covers the domain name used for the load balancer
     Type: String

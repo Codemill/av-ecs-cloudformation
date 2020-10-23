@@ -28,8 +28,6 @@ Parameters:
     Type: String
     Default: "accurate-video"
     Description: Used to tag all resources
-    AllowedValues:
-      - "accurate-video"
   Vpc:
     Type: AWS::EC2::VPC::Id
     Description: "VPC ID"

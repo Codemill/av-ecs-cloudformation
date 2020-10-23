@@ -44,8 +44,6 @@ Parameters:
     Type: String
     Default: "accurate-video"
     Description: Used to tag all resources
-    AllowedValues:
-      - "accurate-video"
   BlackFrameLocation:
     Type: String
     Default: "s3://av-black-frame-codemill/black25.mp4"

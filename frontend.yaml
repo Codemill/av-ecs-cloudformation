@@ -50,8 +50,6 @@ Parameters:
   ApplicationTag:
     Type: String
     Default: "accurate-video"
-    AllowedValues:
-      - "accurate-video"
   Vpc:
     Description: "VPC ID"
     Type: AWS::EC2::VPC::Id

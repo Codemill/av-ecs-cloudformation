@@ -54,8 +54,6 @@ Parameters:
   ApplicationTag:
     Type: String
     Default: "accurate-video"
-    AllowedValues:
-      - "accurate-video"
   Vpc:
     Description: "VPC ID"
     Type: AWS::EC2::VPC::Id
@@ -202,7 +200,7 @@ Resources:
               Value: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
             - Name: SERVICE_NAME_REGEXP
               Value: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/\\S+-(jobs|adapter)-\\S+"
-              
+
           Secrets:
             - Name: QUARKUS_DATASOURCE_USERNAME
               ValueFrom: !Sub
