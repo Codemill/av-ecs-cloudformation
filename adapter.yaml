@@ -135,7 +135,7 @@ Resources:
               - |
                 apk add aws-cli; \
                 aws s3 cp s3://${ConfigBucketName}/adapter/settings.js /opt/static/authenticated/settings.js; \
-                /opt/entrypoint.py java --add-modules java.se --add-exports java.base/jdk.internal.ref=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.management/sun.management=ALL-UNNAMED --add-opens jdk.management/com.sun.management.internal=ALL-UNNAMED -Dvertx.hazelcast.config=${CLUSTER_XML:-/opt/cluster.xml} -jar runner.jar;
+                /opt/entrypoint.py java --add-modules java.se --add-exports java.base/jdk.internal.ref=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.management/sun.management=ALL-UNNAMED --add-opens jdk.management/com.sun.management.internal=ALL-UNNAMED -Dvertx.hazelcast.config=/opt/ecs-cluster.xml -jar runner.jar;
               - ConfigBucketName:
                   Fn::ImportValue: !Sub ${InfrastructureStackName}:ConfigBucketName
           EntryPoint:
