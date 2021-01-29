@@ -130,6 +130,17 @@ Resources:
           Cpu: !Ref "ContainerCpu"
           Memory: !Ref "ContainerMemory"
           Image: !Sub ${ImageRepoName}:${ImageTag}
+          Command:
+            - !Sub
+              - |
+                apk add aws-cli; \
+                aws s3 cp s3://${ConfigBucketName}/adapter/settings.js /opt/static/authenticated/settings.js; \
+                /opt/entrypoint.py java --add-modules java.se --add-exports java.base/jdk.internal.ref=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.management/sun.management=ALL-UNNAMED --add-opens jdk.management/com.sun.management.internal=ALL-UNNAMED -Dvertx.hazelcast.config=/opt/ecs-cluster.xml -jar runner.jar;
+              - ConfigBucketName:
+                  Fn::ImportValue: !Sub ${InfrastructureStackName}:ConfigBucketName
+          EntryPoint:
+            - "sh"
+            - "-c"
           PortMappings:
             - ContainerPort: 8080
             - ContainerPort: 5701
@@ -200,7 +211,6 @@ Resources:
               Value: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
             - Name: SERVICE_NAME_REGEXP
               Value: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/\\S+-(jobs|adapter)-\\S+"
-
           Secrets:
             - Name: QUARKUS_DATASOURCE_USERNAME
               ValueFrom: !Sub
@@ -264,11 +274,7 @@ Resources:
                   - "s3:HeadObject"
                   - "s3:GetObject"
                   - "s3:PutObject"
-                NotResource:
-                  - !Sub
-                    - arn:aws:s3:::${ConfigBucketName}/*
-                    - ConfigBucketName:
-                        Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
+                Resource: "*"
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
