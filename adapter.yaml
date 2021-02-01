@@ -133,7 +133,7 @@ Resources:
             - !Sub
               - |
                 apk add aws-cli; \
-                aws s3 cp s3://${ConfigBucketName}/adapter/settings.js /opt/static/anonymous/settings.js; \
+                aws s3 cp s3://${ConfigBucketName}/adapter/settings.js /opt/static/authenticated/settings.js; \
                 /opt/entrypoint.py java --add-modules java.se --add-exports java.base/jdk.internal.ref=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.management/sun.management=ALL-UNNAMED --add-opens jdk.management/com.sun.management.internal=ALL-UNNAMED -Dvertx.hazelcast.config=/opt/ecs-cluster.xml -jar runner.jar;
               - ConfigBucketName:
                   Fn::ImportValue: !Sub ${InfrastructureStackName}:ConfigBucketName
@@ -159,17 +159,17 @@ Resources:
             - Name: ACL_STORAGE_ENABLED
               Value: "false"
             - Name: AUTH_ENABLED
+              Value: "true"
+            - Name: AUTH_FALLBACK_USERNAME
               Value: "false"
-            # - Name: AUTH_FALLBACK_USERNAME
-            #   Value: "false"
-            # - Name: AUTH_JWT_ENABLED
-            #   Value: "true"
-            # - Name: AUTH_JWT_ISSUER
-            #   Value: "https://keycloak.codemill.cloud/auth/realms/av-dev"
-            # - Name: AUTH_JWT_JWK_FILENAME
-            #   Value: "https://keycloak.codemill.cloud/auth/realms/av-dev/protocol/openid-connect/certs"
-            # - Name: AUTH_JWT_USERNAME
-            #   Value: "preferred_username"
+            - Name: AUTH_JWT_ENABLED
+              Value: "true"
+            - Name: AUTH_JWT_ISSUER
+              Value: "https://keycloak.codemill.cloud/auth/realms/av-dev"
+            - Name: AUTH_JWT_JWK_FILENAME
+              Value: "https://keycloak.codemill.cloud/auth/realms/av-dev/protocol/openid-connect/certs"
+            - Name: AUTH_JWT_USERNAME
+              Value: "preferred_username"
             - Name: DELETION_PHYSICAL_FILE_ENABLED
               Value: "false"
             - Name: QUARKUS_DATASOURCE_DRIVER
