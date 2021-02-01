@@ -7,13 +7,9 @@ Parameters:
     Description:
       The name of the parent Fargate networking stack that you created. Necessary
       to locate and reference resources created by that stack.
-  ServiceName:
-    Type: String
-    Default: av-adapter
-    Description: A name for the service
   DBName:
     Type: String
-    Default: accurateVideo
+    Default: accurate_video
     Description: A name for the database
   ImageRepoName:
     Type: String
@@ -21,7 +17,7 @@ Parameters:
     Description: The ecr repo and tag to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.5.3
+    Default: 4.6.1
     Description: The ecr repo and tag to use for image deployment
   ContainerCpu:
     Type: Number
@@ -49,7 +45,6 @@ Parameters:
     Description: How many copies of the service task to run
   RegistryCredentials:
     Type: String
-    Default: arn:aws:secretsmanager:eu-north-1:653767197116:secret:jfrog-docker-gitlabci-50X7p1
     Description: Credentials to codemill.jfrog.io for pulling docker images
   ApplicationTag:
     Type: String
@@ -70,6 +65,9 @@ Parameters:
     Description: "ECS cluster name"
     Type: String
     Default: av-cluster
+  VpcCidrBlock:
+    Type: String
+    Description: VPC CIDR Block (e.g. 10.0.0.0/16)
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -77,7 +75,6 @@ Metadata:
       - Label:
           default: "Service configuration"
         Parameters:
-          - ServiceName
           - ContainerCpu
           - ContainerMemory
           - DesiredCount
@@ -98,6 +95,8 @@ Metadata:
           - PrivateSubnetOne
           - PrivateSubnetTwo
           - PublicLoadbalancerListenerArn
+          - VpcCidrBlock
+          - ClusterName
           - ApplicationTag
 
 Resources:
@@ -117,16 +116,16 @@ Resources:
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: !Ref "ServiceName"
+      Family: "av-adapter"
       Cpu: !Ref "ContainerCpu"
       Memory: !Ref "ContainerMemory"
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
       ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
-      TaskRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
       ContainerDefinitions:
-        - Name: !Ref "ServiceName"
+        - Name: "av-adapter"
           Cpu: !Ref "ContainerCpu"
           Memory: !Ref "ContainerMemory"
           Image: !Sub ${ImageRepoName}:${ImageTag}
@@ -151,7 +150,7 @@ Resources:
               awslogs-group:
                 Fn::ImportValue: !Sub ${InfrastructureStackName}:AVLogGroup
               awslogs-region: !Ref AWS::Region
-              awslogs-stream-prefix: !Ref ServiceName
+              awslogs-stream-prefix: av-adapter
           RepositoryCredentials:
             CredentialsParameter: !Ref "RegistryCredentials"
           Environment:
@@ -197,8 +196,6 @@ Resources:
               Value: "false"
             - Name: QUARKUS_VERTX_CLUSTER_HOST
               Value: "0.0.0.0"
-            - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_HOST
-              Value: !Sub ${ServiceName}.av.local
             - Name: QUARKUS_VERTX_CLUSTER_PORT
               Value: "5699"
             - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_PORT
@@ -207,10 +204,12 @@ Resources:
               Value: "/api"
             - Name: CLUSTER_XML
               Value: "/opt/ecs-cluster.xml"
-            - Name: CLUSTER_NAME_REGEXP
-              Value: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
-            - Name: SERVICE_NAME_REGEXP
-              Value: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/\\S+-(jobs|adapter)-\\S+"
+            - Name: HZE_CLUSTER_NAME_REGEXP
+              Value: !Sub arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster\/${ClusterName}
+            - Name: HZE_SERVICE_NAME_REGEXP
+              Value: !Sub arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service\/${ClusterName}\/[a-zA-z0-9].*-(JobsService|AdapterService)-.*[a-zA-z0-9]
+            - Name: HZE_IPV4_CIDR
+              Value: !Ref VpcCidrBlock
           Secrets:
             - Name: QUARKUS_DATASOURCE_USERNAME
               ValueFrom: !Sub
@@ -239,7 +238,7 @@ Resources:
           - Effect: Allow
             Principal:
               Service: [ecs-tasks.amazonaws.com]
-            Action: ["sts:AssumeRole"]
+            Action: [sts:AssumeRole]
       Path: /
       Policies:
         - PolicyName: AmazonECSTaskExecutionRolePolicy
@@ -252,28 +251,39 @@ Resources:
                   - !Ref RegistryCredentials
                   - Fn::ImportValue: !Sub ${InfrastructureStackName}:RDSInstanceSecretArn
                   - !Ref AuthRunnerSecret
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ecs-tasks.amazonaws.com]
+            Action: [sts:AssumeRole]
+      Path: /
+      Policies:
+        - PolicyName: AmazonECSTaskRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:HeadObject
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: "*"
               - Effect: Allow
                 Action:
                   - "ecs:ListClusters"
                   - "ecs:ListServices"
                   - "ecs:ListTasks"
                   - "ecs:DescribeTasks"
-                Resource: "*"
-              - Effect: Allow
-                Action:
-                  - "logs:CreateLogStream"
-                  - "logs:PutLogEvents"
-                Resource:
-                  - !Sub
-                    - arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}:*
-                    - LogGroupName:
-                        Fn::ImportValue: !Sub ${InfrastructureStackName}:AVLogGroup
-              - Effect: Allow
-                Action:
-                  - "s3:ListBucket"
-                  - "s3:HeadObject"
-                  - "s3:GetObject"
-                  - "s3:PutObject"
                 Resource: "*"
       Tags:
         - Key: application
@@ -292,7 +302,7 @@ Resources:
             Type: SRV
       HealthCheckCustomConfig:
         FailureThreshold: 1
-      Name: !Ref "ServiceName"
+      Name: adapter
       NamespaceId:
         Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateDNSNamespace
       Tags:
@@ -302,7 +312,7 @@ Resources:
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
   # as monitor the number of running tasks and replace any that have crashed
-  Service:
+  AdapterService:
     Type: AWS::ECS::Service
     DependsOn: LoadBalancerRule
     Properties:
@@ -319,9 +329,10 @@ Resources:
           Subnets:
             - !Ref PrivateSubnetOne
             - !Ref PrivateSubnetTwo
+      PlatformVersion: "1.4.0"
       TaskDefinition: !Ref "TaskDefinition"
       LoadBalancers:
-        - ContainerName: !Ref "ServiceName"
+        - ContainerName: av-adapter
           ContainerPort: 8080
           TargetGroupArn: !Ref "TargetGroup"
       ServiceRegistries:
@@ -350,7 +361,7 @@ Resources:
       Matcher:
         HttpCode: "200,401"
       TargetType: ip
-      Name: !Ref "ServiceName"
+      Name: av-adapter
       Port: 8080
       Protocol: HTTP
       UnhealthyThresholdCount: 2
@@ -370,6 +381,86 @@ Resources:
           Values: [!Ref "Path"]
       ListenerArn: !Ref PublicLoadbalancerListenerArn
       Priority: !Ref "Priority"
+
+  UpdateServiceLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        ZipFile: |
+          const AWS = require('aws-sdk');
+          const ecs = new AWS.ECS();
+          exports.handler = function(event, context, callback) {
+            var params = {
+              service: process.env.SERVICE_NAME,
+              cluster: process.env.CLUSTER_NAME,
+              forceNewDeployment: true
+            };
+            ecs.updateService(params, function(err, data) {
+              if (err) console.log(err, err.stack); // an error occurred
+              else     console.log(data);           // successful response
+            });
+          };
+      Environment:
+        Variables:
+          CLUSTER_NAME: !Ref ClusterName
+          SERVICE_NAME: !Ref AdapterService
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: nodejs12.x
+      Timeout: 5
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  ConfigSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !GetAtt UpdateServiceLambdaFunction.Arn
+      Protocol: lambda
+      TopicArn:
+        Fn::ImportValue: !Sub "${InfrastructureStackName}:FrontendSettingsUpdatedTopicArn"
+
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref UpdateServiceLambdaFunction
+      Principal: sns.amazonaws.com
+      SourceArn:
+        Fn::ImportValue: !Sub "${InfrastructureStackName}:FrontendSettingsUpdatedTopicArn"
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - ecs:UpdateService
+                Resource:
+                  - !Sub arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/${AdapterService.Name}
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
 
 Outputs:
   AuthRunnerSecretArn:

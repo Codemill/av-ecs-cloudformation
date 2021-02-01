@@ -12,21 +12,16 @@ Parameters:
     Default: av-adapter
     Description: The name of the Adapter stack that you created. Necessary
       to locate and reference resources created by that stack.
-  ServiceName:
-    Type: String
-    Default: av-jobs
-    Description: A name for the service
   ImageRepoName:
     Type: String
     Default: codemill-docker.jfrog.io/accurate-player/accurate-video-jobs
     Description: The docker image repo to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.5.3
+    Default: 4.6.1
     Description: The docker image tag to use for image deployment
   RegistryCredentials:
     Type: String
-    Default: arn:aws:secretsmanager:eu-north-1:653767197116:secret:jfrog-docker-gitlabci-50X7p1
     Description: Credentials to codemill.jfrog.io for pulling docker images
   ContainerCpu:
     Type: Number
@@ -60,22 +55,6 @@ Parameters:
     Type: String
     Default: "1"
     Description: Black frame denominator
-  LowresTemplateId:
-    Type: String
-    Default: "standard_h264_follow"
-    Description: Low resolution template ID
-  AudioExtractTemplateId:
-    Type: String
-    Default: "wav"
-    Description: Audio extraction template ID
-  AwsRole:
-    Type: String
-    Default: ""
-    Description: IAM role that Elemental can use to access different media locations
-  ElementalQueue:
-    Type: String
-    Default: ""
-    Description: Will use default queue if not configured
   PrivateSubnetOne:
     Description: "Private Subnet One ID"
     Type: AWS::EC2::Subnet::Id
@@ -86,6 +65,9 @@ Parameters:
     Description: "ECS cluster name"
     Type: String
     Default: av-cluster
+  VpcCidrBlock:
+    Type: String
+    Description: VPC CIDR Block (e.g. 10.0.0.0/16)
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -93,7 +75,6 @@ Metadata:
       - Label:
           default: "Service configuration"
         Parameters:
-          - ServiceName
           - ContainerCpu
           - ContainerMemory
           - DesiredCount
@@ -110,13 +91,6 @@ Metadata:
           - BlackFrameDuration
           - BlackFrameNumerator
           - BlackFrameDenominator
-          - LowresTemplateId
-          - AudioExtractTemplateId
-      - Label:
-          default: "Elemental configuration (optional)"
-        Parameters:
-          - AwsRole
-          - ElementalQueue
       - Label:
           default: "Other"
         Parameters:
@@ -124,26 +98,22 @@ Metadata:
           - AdapterStackName
           - ApplicationTag
 
-Conditions:
-  UseElementalAwsRole: !Not [!Equals [!Ref AwsRole, ""]]
-  UseElementalQueue: !Not [!Equals [!Ref ElementalQueue, ""]]
-
 Resources:
   # The task definition. This is a simple metadata description of what
   # container to run, and what resource requirements it has.
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: !Ref "ServiceName"
+      Family: av-jobs
       Cpu: !Ref "ContainerCpu"
       Memory: !Ref "ContainerMemory"
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
       ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
-      TaskRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
       ContainerDefinitions:
-        - Name: !Ref "ServiceName"
+        - Name: av-jobs
           Cpu: !Ref "ContainerCpu"
           Memory: !Ref "ContainerMemory"
           Image: !Sub ${ImageRepoName}:${ImageTag}
@@ -158,16 +128,26 @@ Resources:
               awslogs-group:
                 Fn::ImportValue: !Sub ${InfrastructureStackName}:AVLogGroup
               awslogs-region: !Ref AWS::Region
-              awslogs-stream-prefix: !Ref ServiceName
+              awslogs-stream-prefix: av-jobs
           Environment:
             - Name: QUARKUS_VERTX_CLUSTER_HOST
               Value: "0.0.0.0"
-            - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_HOST
-              Value: !Sub ${ServiceName}.av.local
             - Name: QUARKUS_VERTX_CLUSTER_PORT
               Value: 5699
             - Name: QUARKUS_VERTX_CLUSTER_PUBLIC_PORT
               Value: 5699
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: HZE_CLUSTER_NAME_REGEXP
+              Value: !Sub arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster\/${ClusterName}
+            - Name: HZE_SERVICE_NAME_REGEXP
+              Value: !Sub arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service\/${ClusterName}\/[a-zA-z0-9].*-(JobsService|AdapterService)-.*[a-zA-z0-9]
+            - Name: HZE_IPV4_CIDR
+              Value: !Ref VpcCidrBlock
+            - Name: AV_RUNNER_LOWRES_TEMPLATE_ID
+              Value: !Ref MediaConvertPresetStandardH264
+            - Name: AV_RUNNER_AUDIO_EXTRACT_TEMPLATE_ID
+              Value: !Ref MediaConvertPresetWav
             - Name: AV_RUNNER_BLACK_FRAME_LOCATION
               Value: !Ref BlackFrameLocation
             - Name: AV_RUNNER_BLACK_FRAME_DURATION
@@ -176,22 +156,8 @@ Resources:
               Value: !Ref BlackFrameNumerator
             - Name: AV_RUNNER_BLACK_FRAME_DENOMINATOR
               Value: !Ref BlackFrameDenominator
-            - Name: AV_RUNNER_LOWRES_TEMPLATE_ID
-              Value: !Ref LowresTemplateId
-            - Name: AV_RUNNER_AUDIO_EXTRACT_TEMPLATE_ID
-              Value: !Ref AudioExtractTemplateId
             - Name: AV_RUNNER_EXECUTOR_POLL_INTERVAL
               Value: PT1M
-            - !If
-              - UseElementalQueue
-              - Name: AV_RUNNER_ELEMENTAL_QUEUE
-                Value: !Ref ElementalQueue
-              - !Ref AWS::NoValue
-            - !If
-              - UseElementalAwsRole
-              - Name: AV_RUNNER_AWS_ROLE
-                Value: !Ref AwsRole
-              - !Ref AWS::NoValue
             - Name: AP_ADAPTER_URL_MP_REST_URL
               Value: !Sub
                 - "http://${AdapterServiceName}.av.local:8080"
@@ -201,10 +167,6 @@ Resources:
               Value: /usr/local/bin
             - Name: CLUSTER_XML
               Value: "/opt/ecs-cluster.xml"
-            - Name: CLUSTER_NAME_REGEXP
-              Value: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:cluster/${ClusterName}"
-            - Name: SERVICE_NAME_REGEXP
-              Value: !Sub "arn:aws:ecs:${AWS::Region}:${AWS::AccountId}:service/${ClusterName}/\\S+-(jobs|adapter)-\\S+"
           Secrets:
             - Name: AP_ADAPTER_USERNAME
               ValueFrom: !Sub
@@ -229,7 +191,7 @@ Resources:
           - Effect: Allow
             Principal:
               Service: [ecs-tasks.amazonaws.com]
-            Action: ["sts:AssumeRole"]
+            Action: [sts:AssumeRole]
       Path: /
       Policies:
         - PolicyName: AmazonECSTaskExecutionRolePolicy
@@ -241,6 +203,35 @@ Resources:
                 Resource:
                   - !Ref RegistryCredentials
                   - Fn::ImportValue: !Sub ${AdapterStackName}:AuthRunnerSecretArn
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ecs-tasks.amazonaws.com]
+            Action: [sts:AssumeRole]
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSElementalMediaConvertFullAccess
+      Policies:
+        - PolicyName: AmazonECSTaskRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:HeadObject
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: "*"
               - Effect: Allow
                 Action:
                   - "ecs:ListClusters"
@@ -248,26 +239,6 @@ Resources:
                   - "ecs:ListTasks"
                   - "ecs:DescribeTasks"
                 Resource: "*"
-              - Effect: Allow
-                Action:
-                  - "logs:CreateLogStream"
-                  - "logs:PutLogEvents"
-                Resource:
-                  - !Sub
-                    - arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}:*
-                    - LogGroupName:
-                        Fn::ImportValue: !Sub ${InfrastructureStackName}:AVLogGroup
-              - Effect: Allow
-                Action:
-                  - "s3:ListBucket"
-                  - "s3:HeadObject"
-                  - "s3:GetObject"
-                  - "s3:PutObject"
-                NotResource:
-                  - !Sub
-                    - arn:aws:s3:::${ConfigBucketName}/*
-                    - ConfigBucketName:
-                        Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -285,7 +256,7 @@ Resources:
             Type: SRV
       HealthCheckCustomConfig:
         FailureThreshold: 1
-      Name: !Ref "ServiceName"
+      Name: av-jobs
       NamespaceId:
         Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateDNSNamespace
       Tags:
@@ -295,7 +266,7 @@ Resources:
   # The service. The service is a resource which allows you to run multiple
   # copies of a type of task, and gather up their logs and metrics, as well
   # as monitor the number of running tasks and replace any that have crashed
-  Service:
+  JobsService:
     Type: AWS::ECS::Service
     Properties:
       Cluster: !Ref ClusterName
@@ -314,7 +285,111 @@ Resources:
           Subnets:
             - !Ref PrivateSubnetOne
             - !Ref PrivateSubnetTwo
+      PlatformVersion: "1.4.0"
       TaskDefinition: !Ref "TaskDefinition"
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
+
+  MediaConvertPresetStandardH264:
+    Type: AWS::MediaConvert::Preset
+    Properties:
+      Description: Generated by Accurate Video
+      Name: accurate_video_standard_h264_follow
+      SettingsJson:
+        VideoDescription:
+          Width: 1920
+          ScalingBehavior: DEFAULT
+          Height: 1080
+          VideoPreprocessors:
+            Deinterlacer:
+              Algorithm: INTERPOLATE
+              Mode: DEINTERLACE
+              Control: NORMAL
+          TimecodeInsertion: DISABLED
+          AntiAlias: ENABLED
+          Sharpness: 50
+          CodecSettings:
+            Codec: H_264
+            H264Settings:
+              InterlaceMode: PROGRESSIVE
+              ParNumerator: 1
+              NumberReferenceFrames: 3
+              Syntax: DEFAULT
+              FramerateDenominator: 1
+              GopClosedCadence: 1
+              HrdBufferInitialFillPercentage: 90
+              GopSize: 90
+              Slices: 1
+              GopBReference: DISABLED
+              HrdBufferSize: 12750000
+              SlowPal: DISABLED
+              ParDenominator: 1
+              SpatialAdaptiveQuantization: ENABLED
+              TemporalAdaptiveQuantization: ENABLED
+              FlickerAdaptiveQuantization: DISABLED
+              EntropyEncoding: CABAC
+              Bitrate: 2000000
+              FramerateControl: INITIALIZE_FROM_SOURCE
+              RateControlMode: CBR
+              CodecProfile: HIGH
+              Telecine: NONE
+              FramerateNumerator: 25
+              MinIInterval: 0
+              AdaptiveQuantization: HIGH
+              CodecLevel: LEVEL_4
+              FieldEncoding: PAFF
+              SceneChangeDetect: ENABLED
+              QualityTuningLevel: MULTI_PASS_HQ
+              FramerateConversionAlgorithm: DUPLICATE_DROP
+              UnregisteredSeiTimecode: DISABLED
+              GopSizeUnits: FRAMES
+              ParControl: SPECIFIED
+              NumberBFramesBetweenReferenceFrames: 1
+              RepeatPps: DISABLED
+          AfdSignaling: NONE
+          DropFrameTimecode: ENABLED
+          RespondToAfd: NONE
+          ColorMetadata: INSERT
+        AudioDescriptions:
+          - AudioTypeControl: FOLLOW_INPUT
+            AudioSourceName: Audio Selector 1
+            CodecSettings:
+              Codec: AAC
+              AacSettings:
+                AudioDescriptionBroadcasterMix: NORMAL
+                Bitrate: 128000
+                RateControlMode: CBR
+                CodecProfile: LC
+                CodingMode: CODING_MODE_2_0
+                RawFormat: NONE
+                SampleRate: 48000
+                Specification: MPEG4
+            LanguageCodeControl: FOLLOW_INPUT
+            AudioType: 0
+        ContainerSettings:
+          Container: MP4
+          Mp4Settings:
+            CslgAtom: INCLUDE
+            FreeSpaceBox: EXCLUDE
+            MoovPlacement: PROGRESSIVE_DOWNLOAD
+
+  MediaConvertPresetWav:
+    Type: AWS::MediaConvert::Preset
+    Properties:
+      Description: Generated by Accurate Video
+      Name: accurate_video_wav
+      SettingsJson:
+        AudioDescriptions:
+          - AudioTypeControl: FOLLOW_INPUT
+            AudioSourceName: Audio Selector 1
+            CodecSettings:
+              Codec: WAV
+              WavSettings:
+                BitDepth: 16
+                Channels: 2
+                SampleRate: 44100
+                Format: RIFF
+            LanguageCodeControl: FOLLOW_INPUT
+        ContainerSettings:
+          Container: RAW

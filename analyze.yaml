@@ -7,21 +7,16 @@ Parameters:
     Description:
       The name of the parent Fargate networking stack that you created. Necessary
       to locate and reference resources created by that stack.
-  ServiceName:
-    Type: String
-    Default: av-analyze
-    Description: A name for the service
   ImageRepoName:
     Type: String
     Default: codemill-docker.jfrog.io/accurate-player/accurate-analyze
     Description: The ecr repo and tag to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.5.3
+    Default: 4.6.0
     Description: The ecr repo and tag to use for image deployment
   RegistryCredentials:
     Type: String
-    Default: arn:aws:secretsmanager:eu-north-1:653767197116:secret:jfrog-docker-gitlabci-50X7p1
     Description: Credentials to codemill.jfrog.io for pulling docker images
   ContainerCpu:
     Type: Number
@@ -88,7 +83,6 @@ Metadata:
       - Label:
           default: "Service configuration"
         Parameters:
-          - ServiceName
           - ContainerCpu
           - ContainerMemory
           - DesiredCount
@@ -101,7 +95,7 @@ Metadata:
           - ImageTag
           - RegistryCredentials
       - Label:
-          default: "...configuration"
+          default: "App configuration"
         Parameters:
           - ApAnalyzeCacheDays
           - ApAnalyzeCacheDir
@@ -111,22 +105,27 @@ Metadata:
           default: "Other"
         Parameters:
           - InfrastructureStackName
+          - Vpc
+          - PrivateSubnetOne
+          - PrivateSubnetTwo
+          - PublicLoadbalancerListenerArn
+          - ClusterName
           - ApplicationTag
 
 Resources:
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: !Ref "ServiceName"
+      Family: av-analyze
       Cpu: !Ref "ContainerCpu"
       Memory: !Ref "ContainerMemory"
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
       ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
-      TaskRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
       ContainerDefinitions:
-        - Name: !Ref "ServiceName"
+        - Name: av-analyze
           Cpu: !Ref "ContainerCpu"
           Memory: !Ref "ContainerMemory"
           Image: !Sub ${ImageRepoName}:${ImageTag}
@@ -134,9 +133,6 @@ Resources:
             CredentialsParameter: !Ref "RegistryCredentials"
           PortMappings:
             - ContainerPort: 8080
-            - ContainerPort: 5700
-            - ContainerPort: 5701
-            - ContainerPort: 5702
           Command:
             - "mkdir /tmp/wav && java -jar accurate-analyze.jar"
           EntryPoint:
@@ -148,7 +144,7 @@ Resources:
               awslogs-group:
                 Fn::ImportValue: !Sub ${InfrastructureStackName}:AVLogGroup
               awslogs-region: !Ref AWS::Region
-              awslogs-stream-prefix: !Ref ServiceName
+              awslogs-stream-prefix: av-analyze
           WorkingDirectory: "/opt/"
           Environment:
             - Name: AP_ANALYZE_CACHE_DAYS
@@ -172,7 +168,7 @@ Resources:
           - Effect: Allow
             Principal:
               Service: [ecs-tasks.amazonaws.com]
-            Action: ["sts:AssumeRole"]
+            Action: [sts:AssumeRole]
       Path: /
       Policies:
         - PolicyName: AmazonECSTaskExecutionRolePolicy
@@ -182,49 +178,33 @@ Resources:
                 Action:
                   - "secretsmanager:GetSecretValue"
                 Resource: !Ref RegistryCredentials
-              - Effect: Allow
-                Action:
-                  - "logs:CreateLogStream"
-                  - "logs:PutLogEvents"
-                Resource:
-                  - !Sub
-                    - arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}:*
-                    - LogGroupName:
-                        Fn::ImportValue: !Sub ${InfrastructureStackName}:AVLogGroup
-              - Effect: Allow
-                Action:
-                  - "s3:ListBucket"
-                  - "s3:HeadObject"
-                  - "s3:GetObject"
-                  - "s3:PutObject"
-                NotResource:
-                  - !Sub
-                    - arn:aws:s3:::${ConfigBucketName}/*
-                    - ConfigBucketName:
-                        Fn::ImportValue: !Sub "${InfrastructureStackName}:ConfigBucketName"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
 
-  # The service. The service is a resource which allows you to run multiple
-  # copies of a type of task, and gather up their logs and metrics, as well
-  # as monitor the number of running tasks and replace any that have crashed
-  DiscoveryService:
-    Type: AWS::ServiceDiscovery::Service
+  ECSTaskRole:
+    Type: AWS::IAM::Role
     Properties:
-      Description: Discovery Service for the Demo Application
-      DnsConfig:
-        RoutingPolicy: MULTIVALUE
-        DnsRecords:
-          - TTL: 60
-            Type: A
-          - TTL: 60
-            Type: SRV
-      HealthCheckCustomConfig:
-        FailureThreshold: 1
-      Name: !Ref "ServiceName"
-      NamespaceId:
-        Fn::ImportValue: !Sub ${InfrastructureStackName}:PrivateDNSNamespace
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ecs-tasks.amazonaws.com]
+            Action: [sts:AssumeRole]
+      Path: /
+      Policies:
+        - PolicyName: AmazonECSTaskRolePolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:HeadObject
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: "*"
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -249,14 +229,12 @@ Resources:
           Subnets:
             - !Ref PrivateSubnetOne
             - !Ref PrivateSubnetTwo
+      PlatformVersion: "1.4.0"
       TaskDefinition: !Ref "TaskDefinition"
       LoadBalancers:
-        - ContainerName: !Ref "ServiceName"
+        - ContainerName: av-analyze
           ContainerPort: 8080
           TargetGroupArn: !Ref "TargetGroup"
-      ServiceRegistries:
-        - RegistryArn: !GetAtt DiscoveryService.Arn
-          Port: 8080
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -280,7 +258,7 @@ Resources:
       Matcher:
         HttpCode: "200,401,400"
       TargetType: ip
-      Name: !Ref "ServiceName"
+      Name: av-analyze
       Port: 8080
       Protocol: HTTP
       UnhealthyThresholdCount: 2
