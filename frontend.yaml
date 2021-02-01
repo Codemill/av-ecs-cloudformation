@@ -137,7 +137,7 @@ Resources:
           Value: !Ref ApplicationTag
 
   # This is a role which is used by the ECS tasks themselves.
- ECSTaskExecutionRole:
+  ECSTaskExecutionRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
