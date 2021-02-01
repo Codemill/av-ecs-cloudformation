@@ -13,11 +13,10 @@ Parameters:
     Description: The ecr repo and tag to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.5.3
+    Default: 4.6.1
     Description: The ecr repo and tag to use for image deployment
   RegistryCredentials:
     Type: String
-    Default: arn:aws:secretsmanager:eu-north-1:653767197116:secret:jfrog-docker-gitlabci-50X7p1
     Description: Credentials to codemill.jfrog.io for pulling docker images
   ContainerCpu:
     Type: Number
@@ -106,6 +105,11 @@ Metadata:
           default: "Other"
         Parameters:
           - InfrastructureStackName
+          - Vpc
+          - PrivateSubnetOne
+          - PrivateSubnetTwo
+          - PublicLoadbalancerListenerArn
+          - ClusterName
           - ApplicationTag
 
 Resources:
@@ -140,7 +144,7 @@ Resources:
               awslogs-group:
                 Fn::ImportValue: !Sub ${InfrastructureStackName}:AVLogGroup
               awslogs-region: !Ref AWS::Region
-              awslogs-stream-prefix: !Ref ServiceName
+              awslogs-stream-prefix: av-analyze
           WorkingDirectory: "/opt/"
           Environment:
             - Name: AP_ANALYZE_CACHE_DAYS
@@ -225,14 +229,12 @@ Resources:
           Subnets:
             - !Ref PrivateSubnetOne
             - !Ref PrivateSubnetTwo
+      PlatformVersion: "1.4.0"
       TaskDefinition: !Ref "TaskDefinition"
       LoadBalancers:
         - ContainerName: av-analyze
           ContainerPort: 8080
           TargetGroupArn: !Ref "TargetGroup"
-      ServiceRegistries:
-        - RegistryArn: !GetAtt DiscoveryService.Arn
-          Port: 8080
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
