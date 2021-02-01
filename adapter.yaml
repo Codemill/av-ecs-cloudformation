@@ -21,7 +21,7 @@ Parameters:
     Description: The ecr repo and tag to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.3.2
+    Default: 4.5.3
     Description: The ecr repo and tag to use for image deployment
   ContainerCpu:
     Type: Number

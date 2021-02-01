@@ -22,7 +22,7 @@ Parameters:
     Description: The docker image repo to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.3.2
+    Default: 4.5.3
     Description: The docker image tag to use for image deployment
   RegistryCredentials:
     Type: String
