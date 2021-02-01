@@ -403,7 +403,7 @@ Resources:
       Environment:
         Variables:
           CLUSTER_NAME: !Ref ClusterName
-          SERVICE_NAME: !Ref Service
+          SERVICE_NAME: !Ref AdapterService
       Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
       Runtime: nodejs12.x
