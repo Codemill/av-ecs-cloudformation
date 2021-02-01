@@ -13,7 +13,7 @@ Parameters:
     Description: The ecr repo and tag to use for image deployment
   ImageTag:
     Type: String
-    Default: 4.6.1
+    Default: 4.6.0
     Description: The ecr repo and tag to use for image deployment
   RegistryCredentials:
     Type: String
