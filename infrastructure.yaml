@@ -342,7 +342,7 @@ Outputs:
     Value: !GetAtt "DBInstance.Endpoint.Address"
     Export:
       Name: !Sub ${AWS::StackName}:DBEndpoint
-  PrivateNamespace:
+  PrivateDNSNamespace:
     Description: Private DNS namespace
     Value: !Ref "PrivateDNSNamespace"
     Export:
