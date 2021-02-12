@@ -308,7 +308,7 @@ Resources:
       Parameters:
         ApplicationTag: !Ref ApplicationTag
         LogsRetention: !Ref LogsRetention
-        PrivateSubnets:  !Join [",", !Ref PrivateSubnets]
+        PrivateSubnets: !Join [",", !Ref PrivateSubnets]
         PublicLoadBalancerSecurityGroup: !GetAtt LoadbalancerStack.Outputs.SecurityGroup
         Vpc: !Ref Vpc
         DBName: accurate_video
@@ -318,14 +318,14 @@ Resources:
       TemplateURL: infrastructure.yaml
       TimeoutInMinutes: 30
 
-  # GetVpcCidrLambdaStack:
-  #   Type: AWS::CloudFormation::Stack
-  #   Properties:
-  #     Parameters:
-  #       ApplicationTag: !Ref ApplicationTag
-  #       Vpc: !Ref Vpc
-  #     TemplateURL: get-vpc-cidr-lambda.yaml
-  #     TimeoutInMinutes: 30
+  GetVpcCidrLambdaStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        ApplicationTag: !Ref ApplicationTag
+        Vpc: !Ref Vpc
+      TemplateURL: get-vpc-cidr-lambda.yaml
+      TimeoutInMinutes: 30
 
   # ############ Adapter ############
   AdapterStack:
@@ -333,7 +333,7 @@ Resources:
     Properties:
       Parameters:
         ApplicationTag: !Ref ApplicationTag
-        ClusterName: !Ref ClusterName
+        ClusterName: !GetAtt ClusterStack.Outputs.ClusterName
         ContainerCpu: !Ref AdapterContainerCpu
         ContainerMemory: !Ref AdapterContainerMemory
         DesiredCount: !Ref AdapterDesiredCount
@@ -341,15 +341,14 @@ Resources:
         ImageTag: !Ref AdapterImageTag
         InfrastructureStackName: !Ref InfrastructureStack
         Path: !FindInMap [Service, Adapter, LoadbalancerListenerPath]
-        Priority: !FindInMap [Service, Adapter, LoadbalancerListenerPath]
-        PrivateSubnetOne:
-        PrivateSubnetTwo:
-        PublicLoadbalancerListenerArn:
-        RegistrySecretArn:
-        Vpc:
-        VpcCidrBlock:
+        Priority: !FindInMap [Service, Adapter, LoadbalancerListenerPriority]
+        PrivateSubnets: !Join [",", !Ref PrivateSubnets]
+        PublicLoadbalancerListenerArn: !GetAtt LoadbalancerStack.Outputs.PublicListener
+        RegistrySecretArn: !Ref RegistrySecretArn
+        Vpc: !Ref Vpc
+        VpcCidrBlock: !GetAtt GetVpcCidrLambdaStack.Outputs.CidrBlock
       TemplateURL: adapter.yaml
-    TimeoutInMinutes: 30
+      TimeoutInMinutes: 30
 
   # AdapterDatabaseStack:
   #   Type: AWS::CloudFormation::Stack

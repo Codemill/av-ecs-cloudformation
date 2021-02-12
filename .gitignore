@@ -4,6 +4,7 @@
 *.log
 tmp/
 .env
+packaged.yaml
 
 # frontend
 settings.js
