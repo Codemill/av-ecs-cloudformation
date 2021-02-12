@@ -62,21 +62,21 @@ Parameters:
     Default: "/api"
     Description: ""
   Vpc:
-    Description: "VPC ID"
     Type: AWS::EC2::VPC::Id
+    Description: "VPC ID"
   PrivateSubnetOne:
+    Type: AWS::EC2::Subnet::Id
     Description: "Private Subnet One ID"
-    Type: AWS::EC2::Subnet::Id
   PrivateSubnetTwo:
-    Description: "Private Subnet Two ID"
     Type: AWS::EC2::Subnet::Id
+    Description: "Private Subnet Two ID"
   PublicLoadbalancerListenerArn:
-    Description: "Public Loadbalancer Listener Arn"
     Type: String
+    Description: "Public Loadbalancer Listener Arn"
   ClusterName:
-    Description: "ECS cluster name"
     Type: String
     Default: av-cluster
+    Description: "ECS cluster name"
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:

@@ -56,15 +56,15 @@ Parameters:
     Default: "1"
     Description: Black frame denominator
   PrivateSubnetOne:
+    Type: AWS::EC2::Subnet::Id
     Description: "Private Subnet One ID"
-    Type: AWS::EC2::Subnet::Id
   PrivateSubnetTwo:
-    Description: "Private Subnet Two ID"
     Type: AWS::EC2::Subnet::Id
+    Description: "Private Subnet Two ID"
   ClusterName:
-    Description: "ECS cluster name"
     Type: String
     Default: av-cluster
+    Description: "ECS cluster name"
   VpcCidrBlock:
     Type: String
     Description: VPC CIDR Block (e.g. 10.0.0.0/16)

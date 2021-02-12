@@ -50,20 +50,20 @@ Parameters:
     Type: String
     Default: "accurate-video"
   Vpc:
-    Description: "VPC ID"
     Type: AWS::EC2::VPC::Id
+    Description: "VPC ID"
   PrivateSubnetOne:
+    Type: AWS::EC2::Subnet::Id
     Description: "Private Subnet One ID"
-    Type: AWS::EC2::Subnet::Id
   PrivateSubnetTwo:
-    Description: "Private Subnet Two ID"
     Type: AWS::EC2::Subnet::Id
+    Description: "Private Subnet Two ID"
   PublicLoadbalancerListenerArn:
+    Type: String
     Description: "Public Loadbalancer Listener Arn"
-    Type: String
   ClusterName:
-    Description: "ECS cluster name"
     Type: String
+    Description: "ECS cluster name"
     Default: av-cluster
   VpcCidrBlock:
     Type: String
