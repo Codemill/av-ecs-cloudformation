@@ -26,11 +26,10 @@ Parameters:
     Description: Size of the database in GB
   ApplicationTag:
     Type: String
-    Default: "accurate-video"
     Description: Used to tag all resources
   Vpc:
-    Type: AWS::EC2::VPC::Id
-    Description: "VPC ID"
+    Type: String
+    Description: VPC ID
   PrivateSubnetOne:
     Type: AWS::EC2::Subnet::Id
     Description: "Private Subnet One ID"
@@ -41,30 +40,8 @@ Parameters:
     Type: AWS::EC2::SecurityGroup::Id
     Description: "Public Loadbalancer Security Group"
 
-Metadata:
-  AWS::CloudFormation::Interface:
-    ParameterGroups:
-      - Label:
-          default: "Database configuration"
-        Parameters:
-          - DBName
-          - DBClass
-          - DBAllocatedStorage
-          - DBUser
-      - Label:
-          default: "ECS cluster configuration"
-        Parameters:
-          - Vpc
-          - PrivateSubnetOne
-          - PrivateSubnetTwo
-          - PublicLoadBalancerSG
-      - Label:
-          default: "Other"
-        Parameters:
-          - ApplicationTag
-
 Resources:
-  PrivateDNSNamespace:
+  PrivateDnsNamespace:
     Type: AWS::ServiceDiscovery::PrivateDnsNamespace
     Properties:
       Name: av.local
@@ -142,10 +119,10 @@ Resources:
       IpProtocol: "tcp"
       FromPort: 5432
       ToPort: 5432
-      SourceSecurityGroupId: !Ref AvAdapterSG
+      SourceSecurityGroupId: !Ref AdapterSG
       GroupId: !Ref RdsDatabaseSG
 
-  AvAdapterSG:
+  AdapterSG:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Access to Adapter service
@@ -162,7 +139,7 @@ Resources:
       FromPort: 8080
       ToPort: 8080
       SourceSecurityGroupId: !Ref "PublicLoadBalancerSG"
-      GroupId: !Ref AvAdapterSG
+      GroupId: !Ref AdapterSG
 
   AdapterSgIngressJobs:
     Type: AWS::EC2::SecurityGroupIngress
@@ -171,8 +148,8 @@ Resources:
       IpProtocol: "tcp"
       FromPort: 8080
       ToPort: 8080
-      SourceSecurityGroupId: !Ref "AvJobsSG"
-      GroupId: !Ref AvAdapterSG
+      SourceSecurityGroupId: !Ref "JobsSecurityGroup"
+      GroupId: !Ref AdapterSG
 
   AdapterSgIngressJobsHazelcast:
     Type: AWS::EC2::SecurityGroupIngress
@@ -181,8 +158,8 @@ Resources:
       IpProtocol: "tcp"
       FromPort: 5699
       ToPort: 5702
-      SourceSecurityGroupId: !Ref "AvJobsSG"
-      GroupId: !Ref AvAdapterSG
+      SourceSecurityGroupId: !Ref "JobsSecurityGroup"
+      GroupId: !Ref AdapterSG
 
   AdapterSgIngressAdapterHazelcast:
     Type: AWS::EC2::SecurityGroupIngress
@@ -191,65 +168,65 @@ Resources:
       IpProtocol: "tcp"
       FromPort: 5699
       ToPort: 5702
-      SourceSecurityGroupId: !Ref "AvAdapterSG"
-      GroupId: !Ref AvAdapterSG
+      SourceSecurityGroupId: !Ref "AdapterSG"
+      GroupId: !Ref AdapterSG
 
-  AvFrontendSG:
+  FrontendSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Access to Frontend service
-      VpcId: !Ref "Vpc"
+      VpcId: !Ref Vpc
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
 
-  AvFrontendSgIngress:
+  FrontendSecurityGroupIngress:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
       Description: Access from the public ALB
-      IpProtocol: "tcp"
+      IpProtocol: tcp
       FromPort: 80
       ToPort: 80
-      SourceSecurityGroupId: !Ref "PublicLoadBalancerSG"
-      GroupId: !Ref AvFrontendSG
+      SourceSecurityGroupId: !Ref PublicLoadBalancerSG
+      GroupId: !Ref FrontendSecurityGroup
 
-  AvAnalyzeSG:
+  AnalyzeSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Access to Analyze service
-      VpcId: !Ref "Vpc"
+      VpcId: !Ref Vpc
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
 
-  AvAnalyzeSgIngress:
+  AnalyzeSecurityGroupIngress:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
       Description: Access from the public ALB
-      IpProtocol: "tcp"
+      IpProtocol: tcp
       FromPort: 8080
       ToPort: 8080
-      SourceSecurityGroupId: !Ref "PublicLoadBalancerSG"
-      GroupId: !Ref AvAnalyzeSG
+      SourceSecurityGroupId: !Ref PublicLoadBalancerSG
+      GroupId: !Ref AnalyzeSecurityGroup
 
-  AvJobsSG:
+  JobsSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Database access from adapter/backend
-      VpcId: !Ref "Vpc"
+      VpcId: !Ref Vpc
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
 
-  JobsSgIngressAdapterHazelcast:
+  JobsSecurityGroupIngressAdapterHazelcast:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
       Description: Access from the Adapter service
-      IpProtocol: "tcp"
+      IpProtocol: tcp
       FromPort: 5699
       ToPort: 5702
-      SourceSecurityGroupId: !Ref AvAdapterSG
-      GroupId: !Ref AvJobsSG
+      SourceSecurityGroupId: !Ref AdapterSG
+      GroupId: !Ref JobsSecurityGroup
 
   JobsSgIngressJobsHazelcast:
     Type: AWS::EC2::SecurityGroupIngress
@@ -258,8 +235,8 @@ Resources:
       IpProtocol: "tcp"
       FromPort: 5699
       ToPort: 5702
-      SourceSecurityGroupId: !Ref AvJobsSG
-      GroupId: !Ref AvJobsSG
+      SourceSecurityGroupId: !Ref JobsSecurityGroup
+      GroupId: !Ref JobsSecurityGroup
 
   ######################## CloudWatch Log Group #######################
   #####################################################################
@@ -342,36 +319,36 @@ Outputs:
     Value: !GetAtt "DBInstance.Endpoint.Address"
     Export:
       Name: !Sub ${AWS::StackName}:DBEndpoint
-  PrivateDNSNamespace:
+  PrivateDnsNamespace:
     Description: Private DNS namespace
-    Value: !Ref "PrivateDNSNamespace"
+    Value: !Ref "PrivateDnsNamespace"
     Export:
-      Name: !Sub ${AWS::StackName}:PrivateDNSNamespace
+      Name: !Sub ${AWS::StackName}:PrivateDnsNamespace
   RdsDatabaseSG:
     Description: Security group for the RDS instance
     Value: !Ref RdsDatabaseSG
     Export:
       Name: !Sub ${AWS::StackName}:RdsDatabaseSG
-  AvAdapterSG:
+  AdapterSG:
     Description: Security group for the Adapter service
-    Value: !Ref AvAdapterSG
+    Value: !Ref AdapterSG
     Export:
-      Name: !Sub ${AWS::StackName}:AvAdapterSG
-  AvFrontendSG:
+      Name: !Sub ${AWS::StackName}:AdapterSG
+  FrontendSecurityGroup:
     Description: Security group for the Frontend service
-    Value: !Ref AvFrontendSG
+    Value: !Ref FrontendSecurityGroup
     Export:
-      Name: !Sub ${AWS::StackName}:AvFrontendSG
-  AvAnalyzeSG:
+      Name: !Sub ${AWS::StackName}:FrontendSecurityGroup
+  AnalyzeSecurityGroup:
     Description: Security group for the Analyze service
-    Value: !Ref AvAnalyzeSG
+    Value: !Ref AnalyzeSecurityGroup
     Export:
-      Name: !Sub ${AWS::StackName}:AvAnalyzeSG
-  AvJobsSG:
+      Name: !Sub ${AWS::StackName}:AnalyzeSecurityGroup
+  JobsSecurityGroup:
     Description: Security group for the Jobs service
-    Value: !Ref AvJobsSG
+    Value: !Ref JobsSecurityGroup
     Export:
-      Name: !Sub ${AWS::StackName}:AvJobsSG
+      Name: !Sub ${AWS::StackName}:JobsSecurityGroup
   RDSInstanceSecretArn:
     Description: Secrets Manager Secret ARN for RDS instance
     Value: !Ref "RDSInstanceSecret"
