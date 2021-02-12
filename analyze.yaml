@@ -15,7 +15,7 @@ Parameters:
     Type: String
     Default: 4.6.0
     Description: The ecr repo and tag to use for image deployment
-  RegistryCredentials:
+  RegistrySecretArn:
     Type: String
     Description: Credentials to codemill.jfrog.io for pulling docker images
   ContainerCpu:
@@ -93,7 +93,7 @@ Metadata:
         Parameters:
           - ImageRepoName
           - ImageTag
-          - RegistryCredentials
+          - RegistrySecretArn
       - Label:
           default: "App configuration"
         Parameters:
@@ -130,7 +130,7 @@ Resources:
           Memory: !Ref "ContainerMemory"
           Image: !Sub ${ImageRepoName}:${ImageTag}
           RepositoryCredentials:
-            CredentialsParameter: !Ref "RegistryCredentials"
+            CredentialsParameter: !Ref "RegistrySecretArn"
           PortMappings:
             - ContainerPort: 8080
           Command:
@@ -177,7 +177,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - "secretsmanager:GetSecretValue"
-                Resource: !Ref RegistryCredentials
+                Resource: !Ref RegistrySecretArn
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
       Tags:

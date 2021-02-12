@@ -37,7 +37,6 @@ aws cloudformation deploy \
     AnalyzeImageTag="${ANALYZE_IMAGE_TAG}" \
     ApplicationTag="${APPLICATION_TAG}" \
     CapacityProvider="${CAPACITY_PROVIDER}" \
-    ContainerRegistry="${CONTAINER_REGISTRY}" \
     DomainName="${DOMAIN_NAME}" \
     FrontendContainerCpu="${FRONTEND_CONTAINER_CPU}" \
     FrontendContainerMemory="${FRONTEND_CONTAINER_MEMORY}" \
@@ -56,6 +55,7 @@ aws cloudformation deploy \
     LogsRetention="${LOGS_RETENTION}" \
     PrivateSubnets="${PRIVATE_SUBNETS}" \
     PublicSubnets="${PUBLIC_SUBNETS}" \
+    RegistrySecretArn="${REGISTRY_SECRET_ARN}" \
     Vpc="${VPC}" \
   --profile "${PROFILE}" \
   --region "${REGION}" \

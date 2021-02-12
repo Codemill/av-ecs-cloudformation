@@ -43,7 +43,7 @@ Parameters:
     Type: Number
     Default: 1
     Description: How many copies of the service task to run
-  RegistryCredentials:
+  RegistrySecretArn:
     Type: String
     Description: Credentials to codemill.jfrog.io for pulling docker images
   ApplicationTag:
@@ -52,12 +52,9 @@ Parameters:
   Vpc:
     Type: AWS::EC2::VPC::Id
     Description: "VPC ID"
-  PrivateSubnetOne:
-    Type: AWS::EC2::Subnet::Id
-    Description: "Private Subnet One ID"
-  PrivateSubnetTwo:
-    Type: AWS::EC2::Subnet::Id
-    Description: "Private Subnet Two ID"
+  PrivateSubnets:
+    Type: String
+    Description: "Private Subnet IDs"
   PublicLoadbalancerListenerArn:
     Type: String
     Description: "Public Loadbalancer Listener Arn"
@@ -80,26 +77,76 @@ Metadata:
           - DesiredCount
           - Priority
           - Path
-          - DBName
       - Label:
           default: "Image configuration"
         Parameters:
           - ImageRepoName
           - ImageTag
-          - RegistryCredentials
+          - RegistrySecretArn
       - Label:
           default: "Other"
         Parameters:
           - InfrastructureStackName
           - Vpc
-          - PrivateSubnetOne
-          - PrivateSubnetTwo
+          - PrivateSubnets
           - PublicLoadbalancerListenerArn
           - VpcCidrBlock
           - ClusterName
           - ApplicationTag
 
 Resources:
+  ################################ RDS ################################
+  #####################################################################
+  RdsDbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: AccurateVideo-Adapter-DB-Subnet-group
+      SubnetIds: !Split [",", !Ref PrivateSubnets]
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  RDSInstanceSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: "RDS instance secret"
+      GenerateSecretString:
+        SecretStringTemplate: !Sub '{"username": "${DBUser}"}'
+        GenerateStringKey: "password"
+        PasswordLength: 16
+        ExcludeCharacters: '"@/\'
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  DBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: !Ref DBAllocatedStorage
+      # BackupRetentionPeriod:
+      DBInstanceClass: !Ref DBClass
+      DBName: accurate_video
+      DBSubnetGroupName: !Ref RdsDbSubnetGroup
+      DeletionProtection: true
+      Engine: Postgres
+      MasterUsername: !Sub "{{resolve:secretsmanager:${RDSInstanceSecret}::username}}"
+      MasterUserPassword: !Sub "{{resolve:secretsmanager:${RDSInstanceSecret}::password}}"
+      # MaxAllocatedStorage:
+      MultiAZ: true
+      # PreferredBackupWindow: hh24:mi-hh24:mi
+      # PreferredMaintenanceWindow: ddd:hh24:mi-ddd:hh24:mi
+      StorageEncrypted: true
+      VPCSecurityGroups:
+        - !GetAtt RdsDatabaseSG.GroupId
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+
+
+
+
   AuthRunnerSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
@@ -152,7 +199,7 @@ Resources:
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: av-adapter
           RepositoryCredentials:
-            CredentialsParameter: !Ref "RegistryCredentials"
+            CredentialsParameter: !Ref "RegistrySecretArn"
           Environment:
             - Name: ACL_ENABLED
               Value: "false"
@@ -179,7 +226,7 @@ Resources:
                 - "jdbc:postgresql://${DBUrl}/${dbName}"
                 - DBUrl:
                     Fn::ImportValue: !Sub ${InfrastructureStackName}:DBEndpoint
-                  dbName: !Ref "DBName"
+                  dbName: "accurate_video"
             - Name: QUARKUS_FLYWAY_BASELINE-ON-MIGRATE
               Value: "false"
             - Name: QUARKUS_FLYWAY_MIGRATE-AT-START
@@ -248,7 +295,7 @@ Resources:
                 Action:
                   - "secretsmanager:GetSecretValue"
                 Resource:
-                  - !Ref RegistryCredentials
+                  - !Ref RegistrySecretArn
                   - Fn::ImportValue: !Sub ${InfrastructureStackName}:RDSInstanceSecretArn
                   - !Ref AuthRunnerSecret
       ManagedPolicyArns:
@@ -326,9 +373,7 @@ Resources:
         AwsvpcConfiguration:
           SecurityGroups:
             - Fn::ImportValue: !Sub ${InfrastructureStackName}:AvAdapterSG
-          Subnets:
-            - !Ref PrivateSubnetOne
-            - !Ref PrivateSubnetTwo
+          Subnets: !Split [",", !Ref PrivateSubnets]
       PlatformVersion: "1.4.0"
       TaskDefinition: !Ref "TaskDefinition"
       LoadBalancers:
@@ -474,3 +519,9 @@ Outputs:
     Value: !GetAtt "DiscoveryService.Name"
     Export:
       Name: !Sub ${AWS::StackName}:DiscoveryServiceName
+
+  DBEndpoint:
+    Description: The endpoint of the database
+    Value: !GetAtt "DBInstance.Endpoint.Address"
+    Export:
+      Name: !Sub ${AWS::StackName}:DBEndpoint

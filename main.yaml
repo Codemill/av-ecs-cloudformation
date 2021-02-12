@@ -23,10 +23,9 @@ Parameters:
       - FARGATE
       - FARGATE_SPOT
     Description: Capacity Provider
-  ContainerRegistry:
+  RegistrySecretArn:
     Type: String
-    Description: Container Registry
-    Default: 709825985650.dkr.ecr.us-east-1.amazonaws.com/codemill
+    Description: Credentials to codemill.jfrog.io for pulling docker images
   AdapterImageTag:
     Type: String
     Default: 4.6.1
@@ -255,32 +254,30 @@ Metadata:
 Mappings:
   Service:
     Adapter:
-      ImageRepoName: accurate-video-adapter
+      ImageRepoName: codemill-docker.jfrog.io/accurate-player/accurate-player-adapter-postgres
       LoadbalancerListenerPriority: "2"
       LoadbalancerListenerPath: "/api/*"
       MultiAZ: "false"
       RdsAllocatedStorage: "20"
       RdsMaxAllocatedStorage: "100"
     Analyze:
-      ImageRepoName: accurate-video-analyze
+      ImageRepoName: codemill-docker.jfrog.io/accurate-player/accurate-analyze
       LoadbalancerListenerPath: "/api/analyze/*"
       LoadbalancerListenerPriority: "1"
     Frontend:
-      ImageRepoName: accurate-video-frontend
+      ImageRepoName: codemill-docker.jfrog.io/accurate-player/accurate-player-qc
       LoadbalancerListenerPath: "*"
       LoadbalancerListenerPriority: "4"
     Jobs:
-      ImageRepoName: accurate-video-jobs
+      ImageRepoName: codemill-docker.jfrog.io/accurate-player/accurate-video-jobs
     Keycloak:
-      ImageRepoName: accurate-video-keycloak
+      ImageRepoName: codemill-docker.jfrog.io/accurate-player/accurate-video-keycloak
       LoadbalancerListenerPath: "/auth*"
       LoadbalancerListenerPriority: "3"
       MultiAZ: "false"
       RdsAllocatedStorage: "20"
       RdsMaxAllocatedStorage: "21"
   Common:
-    CloudFormation:
-      Bucket: https://s3-eu-north-1.amazonaws.com/av-marketplace-cf/latest
     DNS:
       PrivateHostedZoneName: accurate-video.internal
 
@@ -310,8 +307,7 @@ Resources:
     Properties:
       Parameters:
         ApplicationTag: !Ref ApplicationTag
-        # LogsRetention: !Ref LogsRetention
-        # PrivateHostedZoneName: !FindInMap [Common, DNS, PrivateHostedZoneName]
+        LogsRetention: !Ref LogsRetention
         PrivateSubnets:  !Join [",", !Ref PrivateSubnets]
         PublicLoadBalancerSecurityGroup: !GetAtt LoadbalancerStack.Outputs.SecurityGroup
         Vpc: !Ref Vpc
@@ -332,6 +328,29 @@ Resources:
   #     TimeoutInMinutes: 30
 
   # ############ Adapter ############
+  AdapterStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        ApplicationTag: !Ref ApplicationTag
+        ClusterName: !Ref ClusterName
+        ContainerCpu: !Ref AdapterContainerCpu
+        ContainerMemory: !Ref AdapterContainerMemory
+        DesiredCount: !Ref AdapterDesiredCount
+        ImageRepoName: !FindInMap [Service, Adapter, ImageRepoName]
+        ImageTag: !Ref AdapterImageTag
+        InfrastructureStackName: !Ref InfrastructureStack
+        Path: !FindInMap [Service, Adapter, LoadbalancerListenerPath]
+        Priority: !FindInMap [Service, Adapter, LoadbalancerListenerPath]
+        PrivateSubnetOne:
+        PrivateSubnetTwo:
+        PublicLoadbalancerListenerArn:
+        RegistrySecretArn:
+        Vpc:
+        VpcCidrBlock:
+      TemplateURL: adapter.yaml
+    TimeoutInMinutes: 30
+
   # AdapterDatabaseStack:
   #   Type: AWS::CloudFormation::Stack
   #   Properties:

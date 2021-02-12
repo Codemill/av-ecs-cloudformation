@@ -43,7 +43,7 @@ Parameters:
     Type: Number
     Default: 1
     Description: How many copies of the service task to run
-  RegistryCredentials:
+  RegistrySecretArn:
     Type: String
     Description: Credentials to codemill.jfrog.io for pulling docker images
   ApplicationTag:
@@ -82,7 +82,7 @@ Metadata:
         Parameters:
           - ImageRepoName
           - ImageTag
-          - RegistryCredentials
+          - RegistrySecretArn
       - Label:
           default: "Other"
         Parameters:
@@ -133,7 +133,7 @@ Resources:
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: !Ref ServiceName
           RepositoryCredentials:
-            CredentialsParameter: !Ref "RegistryCredentials"
+            CredentialsParameter: !Ref "RegistrySecretArn"
           PortMappings:
             - ContainerPort: 80
       Tags:
@@ -159,7 +159,7 @@ Resources:
                 Action:
                   - "secretsmanager:GetSecretValue"
                 Resource:
-                  - !Ref RegistryCredentials
+                  - !Ref RegistrySecretArn
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
       Tags:
