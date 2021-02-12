@@ -30,13 +30,10 @@ Parameters:
   Vpc:
     Type: String
     Description: VPC ID
-  PrivateSubnetOne:
-    Type: AWS::EC2::Subnet::Id
-    Description: "Private Subnet One ID"
-  PrivateSubnetTwo:
-    Type: AWS::EC2::Subnet::Id
-    Description: "Private Subnet Two ID"
-  PublicLoadBalancerSG:
+  PrivateSubnets:
+    Type: String
+    Description: "Private Subnet IDs"
+  PublicLoadBalancerSecurityGroup:
     Type: AWS::EC2::SecurityGroup::Id
     Description: "Public Loadbalancer Security Group"
 
@@ -56,9 +53,7 @@ Resources:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
       DBSubnetGroupDescription: "RDS-Subnet-group"
-      SubnetIds:
-        - !Ref PrivateSubnetOne
-        - !Ref PrivateSubnetTwo
+      SubnetIds: !Split [",", !Ref PrivateSubnets]
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -138,7 +133,7 @@ Resources:
       IpProtocol: "tcp"
       FromPort: 8080
       ToPort: 8080
-      SourceSecurityGroupId: !Ref "PublicLoadBalancerSG"
+      SourceSecurityGroupId: !Ref "PublicLoadBalancerSecurityGroup"
       GroupId: !Ref AdapterSG
 
   AdapterSgIngressJobs:
@@ -187,7 +182,7 @@ Resources:
       IpProtocol: tcp
       FromPort: 80
       ToPort: 80
-      SourceSecurityGroupId: !Ref PublicLoadBalancerSG
+      SourceSecurityGroupId: !Ref PublicLoadBalancerSecurityGroup
       GroupId: !Ref FrontendSecurityGroup
 
   AnalyzeSecurityGroup:
@@ -206,7 +201,7 @@ Resources:
       IpProtocol: tcp
       FromPort: 8080
       ToPort: 8080
-      SourceSecurityGroupId: !Ref PublicLoadBalancerSG
+      SourceSecurityGroupId: !Ref PublicLoadBalancerSecurityGroup
       GroupId: !Ref AnalyzeSecurityGroup
 
   JobsSecurityGroup:

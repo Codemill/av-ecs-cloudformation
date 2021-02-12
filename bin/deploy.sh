@@ -6,6 +6,7 @@ set +o allexport
 
 PROFILE="${1}"
 REGION="${2}"
+TEMPLATE_BUCKET_NAME="${3}"
 
 if [ -z "${PROFILE}" ] ; then
   read -rp "AWS Profile: " PROFILE
@@ -13,6 +14,10 @@ fi
 
 if [ -z "${REGION}" ] ; then
   read -rp "AWS Region: " REGION
+fi
+
+if [ -z "${TEMPLATE_BUCKET_NAME}" ] ; then
+  read -rp "AWS S3 Bucket Name: " TEMPLATE_BUCKET_NAME
 fi
 
 aws cloudformation package \
