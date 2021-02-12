@@ -308,13 +308,8 @@ Resources:
       Parameters:
         ApplicationTag: !Ref ApplicationTag
         LogsRetention: !Ref LogsRetention
-        PrivateSubnets: !Join [",", !Ref PrivateSubnets]
         PublicLoadBalancerSecurityGroup: !GetAtt LoadbalancerStack.Outputs.SecurityGroup
         Vpc: !Ref Vpc
-        DBName: accurate_video
-        DBUser: postgres
-        DBClass: !Ref AdapterRdsDbClass
-        DBAllocatedStorage: 5
       TemplateURL: infrastructure.yaml
       TimeoutInMinutes: 30
 
@@ -347,6 +342,12 @@ Resources:
         RegistrySecretArn: !Ref RegistrySecretArn
         Vpc: !Ref Vpc
         VpcCidrBlock: !GetAtt GetVpcCidrLambdaStack.Outputs.CidrBlock
+        RdsAllocatedStorage: !FindInMap [Service, Adapter, RdsAllocatedStorage]
+        RdsMaxAllocatedStorage: !FindInMap [Service, Adapter, RdsMaxAllocatedStorage]
+        RdsDbClass: !Ref AdapterRdsDbClass
+        RdsDatabaseSG: !GetAtt InfrastructureStack.Outputs.RdsDatabaseSG
+        LogGroupName: !GetAtt InfrastructureStack.Outputs.LogGroupName
+        MultiAZ: !FindInMap [Service, Adapter, MultiAZ]
       TemplateURL: adapter.yaml
       TimeoutInMinutes: 30
 
