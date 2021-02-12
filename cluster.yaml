@@ -1,29 +1,17 @@
-AWSTemplateFormatVersion: "2010-09-09"
+AWSTemplateFormatVersion: 2010-09-09
 Description: This template will deploy an ECS cluster
 Parameters:
   ClusterName:
     Type: String
-    Default: av-cluster
+    Default: accurate-video
     Description: Name of the ECS cluster
   ApplicationTag:
     Type: String
     Default: "accurate-video"
     Description: Used to tag all resources
 
-Metadata:
-  AWS::CloudFormation::Interface:
-    ParameterGroups:
-      - Label:
-          default: "ECS cluster configuration"
-        Parameters:
-          - ClusterName
-      - Label:
-          default: "Other"
-        Parameters:
-          - ApplicationTag
-
 Resources:
-  ECSCluster:
+  EcsCluster:
     Type: AWS::ECS::Cluster
     Properties:
       ClusterName: !Ref ClusterName
@@ -33,5 +21,5 @@ Resources:
 
 Outputs:
   ClusterName:
-    Description: The name of the ECS cluster
-    Value: !Ref "ECSCluster"
+    Description: ECS Cluster Name
+    Value: !Ref EcsCluster
