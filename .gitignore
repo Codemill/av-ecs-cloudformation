@@ -3,6 +3,7 @@
 .idea
 *.log
 tmp/
+.env
 
 # frontend
 settings.js
