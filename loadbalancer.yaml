@@ -1,72 +1,33 @@
-AWSTemplateFormatVersion: "2010-09-09"
+AWSTemplateFormatVersion: 2010-09-09
 Description: This template will deploy a public Application Load Balancer
   used to route traffic to the containers in the private subnets.
 
 Parameters:
   ApplicationTag:
     Type: String
-    Default: "accurate-video"
     Description: Used to tag all resources
-  CertificateArn:
-    Type: String
-    Description: SSL certificate ARN in CertificateManager which covers the domain name used for the load balancer
   HostedZoneId:
-    Type: AWS::Route53::HostedZone::Id
-    Description: "Route53 Hosted Zone Id"
+    Type: String
+    Description: Route53 Hosted Zone Id
   LoadBalancerDomainName:
     Type: String
-    Description: "Domain name that will be given to the load balancer, including a trailing dot (e.g. av.example.com.)"
+    Description: Domain name that will be given to the load balancer (e.g. av.example.com)
+  PublicSubnets:
+    Type: String
+    Description: Public Subnets (comma separated)
   Vpc:
-    Type: AWS::EC2::VPC::Id
-    Description: "VPC ID"
-  PublicSubnetOne:
-    Type: AWS::EC2::Subnet::Id
-    Description: "Public Subnet One ID"
-  PublicSubnetTwo:
-    Type: AWS::EC2::Subnet::Id
-    Description: "Public Subnet Two ID"
+    Type: String
+    Description: VPC ID
 
-Metadata:
-  AWS::CloudFormation::Interface:
-    ParameterGroups:
-      - Label:
-          default: "Network configuration"
-        Parameters:
-          - Vpc
-          - PublicSubnetOne
-          - PublicSubnetTwo
-      - Label:
-          default: "DNS and SSL configuration"
-        Parameters:
-          - CertificateArn
-          - HostedZoneId
-          - LoadBalancerDomainName
-      - Label:
-          default: "Other"
-        Parameters:
-          - ApplicationTag
+Conditions:
+  CreateInsecureDomain:
+    !And
+      - !Equals [!Ref HostedZoneId, ""]
+      - !Equals [!Ref LoadBalancerDomainName, ""]
+  CreateSecureDomain:
+    !Not [Condition: CreateInsecureDomain]
 
 Resources:
-  # A public facing load balancer, this is used for accepting traffic from the public
-  # internet and directing it to public facing microservices
-  PublicLoadBalancerSG:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Access to the public facing load balancer
-      VpcId: !Ref "Vpc"
-      SecurityGroupIngress:
-        - CidrIp: 0.0.0.0/0
-          IpProtocol: "tcp"
-          FromPort: 80
-          ToPort: 80
-        - CidrIp: 0.0.0.0/0
-          IpProtocol: "tcp"
-          FromPort: 443
-          ToPort: 443
-      Tags:
-        - Key: application
-          Value: !Ref ApplicationTag
-
   PublicLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
@@ -74,12 +35,8 @@ Resources:
       LoadBalancerAttributes:
         - Key: idle_timeout.timeout_seconds
           Value: "30"
-      Subnets:
-        # The load balancer is placed into the public subnets, so that traffic
-        # from the internet can reach the load balancer directly via the internet gateway
-        - !Ref PublicSubnetOne
-        - !Ref PublicSubnetTwo
-      SecurityGroups: [!Ref "PublicLoadBalancerSG"]
+      Subnets: !Split [ ',', !Ref PublicSubnets ]
+      SecurityGroups: [!Ref SecurityGroup]
       Tags:
         - Key: application
           Value: !Ref ApplicationTag
@@ -88,43 +45,87 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
-        - RedirectConfig:
-            Host: "#{host}"
-            Path: "/#{path}"
-            Port: "443"
-            Protocol: HTTPS
-            Query: "#{query}"
-            StatusCode: HTTP_301
-          Type: redirect
+        - !If CreateInsecureDomain
+            - FixedResponseConfig:
+                ContentType: text/plain
+                MessageBody: "Not implemented"
+                StatusCode: "200"
+              Type: fixed-response
+            - RedirectConfig:
+                Host: "#{host}"
+                Path: "/#{path}"
+                Port: "443"
+                Protocol: HTTPS
+                Query: "#{query}"
+                StatusCode: HTTP_301
+              Type: redirect
       LoadBalancerArn: !Ref PublicLoadBalancer
       Port: 80
       Protocol: HTTP
 
   PublicLoadBalancerListenerHttps:
     Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: CreateSecureDomain
     Properties:
       DefaultActions:
         - FixedResponseConfig:
             ContentType: text/plain
             MessageBody: "Not implemented"
             StatusCode: "200"
-          Type: "fixed-response"
-      LoadBalancerArn: !Ref "PublicLoadBalancer"
+          Type: fixed-response
+      LoadBalancerArn: !Ref PublicLoadBalancer
       Port: 443
       Protocol: HTTPS
       SslPolicy: "ELBSecurityPolicy-2016-08"
       Certificates:
-        - CertificateArn: !Ref CertificateArn
+        - CertificateArn: !Ref Certificate
 
   AliasRecord:
     Type: AWS::Route53::RecordSet
+    Condition: CreateSecureDomain
     Properties:
       AliasTarget:
         DNSName: !GetAtt PublicLoadBalancer.DNSName
         HostedZoneId: !GetAtt PublicLoadBalancer.CanonicalHostedZoneID
       HostedZoneId: !Ref HostedZoneId
-      Name: !Ref LoadBalancerDomainName
+      Name: !Sub "${LoadBalancerDomainName}."
       Type: A
+
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Condition: CreateSecureDomain
+    Properties:
+      DomainName: !Ref LoadBalancerDomainName
+      DomainValidationOptions:
+        - DomainName: !Ref LoadBalancerDomainName
+          HostedZoneId: !Ref HostedZoneId
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+        - Key: Name
+          Value: AccurateVideo - ALB Certificate
+      ValidationMethod: DNS
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to the public facing load balancer
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+        - Key: Name
+          Value: AccurateVideo - ALB SG
+
 
 Outputs:
   ExternalUrl:
@@ -133,3 +134,6 @@ Outputs:
   PublicListener:
     Description: The ARN of the public load balancer's Listener
     Value: !Ref PublicLoadBalancerListenerHttps
+  SecurityGroup:
+    Description: The SecurityGroup attached to the public load balancer
+    Value: !Ref SecurityGroup
