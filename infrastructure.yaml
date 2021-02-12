@@ -228,6 +228,11 @@ Resources:
 # about changing any of them, because of them are exported with specific
 # names so that the other task related CF templates can use them.
 Outputs:
+  ConfigBucketName:
+    Description: The name of the AV Config Bucket
+    Value: !Ref "ConfigBucket"
+    Export:
+      Name: !Sub ${AWS::StackName}:ConfigBucketName
   FrontendSettingsUpdatedTopicArn:
     Description: The SNS topic notified when frontend configuration files have changed
     Value: !Ref "FrontendSettingsUpdatedTopic"
