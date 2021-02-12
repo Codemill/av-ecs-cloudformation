@@ -170,7 +170,7 @@ Resources:
 
   ######################## CloudWatch Log Group #######################
   #####################################################################
-  AVLogGroup:
+  LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       RetentionInDays: !Ref LogsRetention
@@ -235,9 +235,9 @@ Outputs:
       Name: !Sub ${AWS::StackName}:FrontendSettingsUpdatedTopicArn
   LogGroup:
     Description: The name of the AV Log Group
-    Value: !Ref "AVLogGroup"
+    Value: !Ref "LogGroup"
     Export:
-      Name: !Sub ${AWS::StackName}:AVLogGroup
+      Name: !Sub ${AWS::StackName}:LogGroup
   PrivateDnsNamespace:
     Description: Private DNS namespace
     Value: !Ref "PrivateDnsNamespace"

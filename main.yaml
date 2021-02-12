@@ -346,7 +346,7 @@ Resources:
         RdsMaxAllocatedStorage: !FindInMap [Service, Adapter, RdsMaxAllocatedStorage]
         RdsDbClass: !Ref AdapterRdsDbClass
         RdsDatabaseSG: !GetAtt InfrastructureStack.Outputs.RdsDatabaseSG
-        LogGroupName: !GetAtt InfrastructureStack.Outputs.LogGroupName
+        LogGroupName: !GetAtt InfrastructureStack.Outputs.LogGroup
         MultiAZ: !FindInMap [Service, Adapter, MultiAZ]
       TemplateURL: adapter.yaml
       TimeoutInMinutes: 30
