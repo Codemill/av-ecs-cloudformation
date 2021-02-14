@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 
+SCRIPT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
+# shellcheck source=../bin/lib/env
+source "$SCRIPT_ROOT/lib/env"
+
+# shellcheck source=lib/log/log.sh
+source "$LIB_ROOT/log/log.sh"
+
 set -o allexport
+# shellcheck source=../.env
 [[ -f .env ]] && source .env
 set +o allexport
 
@@ -55,9 +63,12 @@ if [ -z "${PROFILE}" ] ; then
   read -rp "AWS Profile: " PROFILE
 fi
 
+log_info "Deploying to region: $REGION"
+log_info "With profile: $PROFILE"
+
 aws cloudformation package \
-  --template-file main.yaml \
-  --output-template packaged.yaml \
+  --template-file "$PROJECT_ROOT"/main.yaml \
+  --output-template "$PROJECT_ROOT"/packaged.yaml \
   --s3-bucket "${TEMPLATE_BUCKET_NAME}" \
   --profile "${PROFILE}" \
   --region "${REGION}"
