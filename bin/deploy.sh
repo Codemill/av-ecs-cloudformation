@@ -4,15 +4,55 @@ set -o allexport
 [[ -f .env ]] && source .env
 set +o allexport
 
-PROFILE="${1}"
-REGION="${2}"
+
+
+options=$(getopt \
+  --options "" \
+  --longoptions help,region,profile: \
+  -- "$@")
+eval set --"$options"
+
+REGION=eu-west-1
+
+usage() {
+  echo "Usage: $0 [--region=<aws-region>] [--help]"
+  echo -e "\t--help \n\t\tdescribes how to use the tool"
+  echo -e "\t--region \n\t\twhich region to deploy to \n\t\t(DEFAULT = $REGION)"
+  echo -e "\t--profile \n\t\twhich configured aws profile to use for the deployment\n"
+  echo ""
+  echo -e "Deploys AV in a custom setup in AWS"
+  echo ""
+
+  exit 1
+}
+
+while true; do
+  case "$1" in
+  --region)
+    shift
+    REGION="$1"
+    ;;
+
+  --profile)
+    shift
+    PROFILE="$1"
+    ;;
+
+  --help)
+    usage
+    exit 1
+    ;;
+
+  --)
+    shift
+    break
+    ;;
+  esac
+  shift
+done
 
 if [ -z "${PROFILE}" ] ; then
   read -rp "AWS Profile: " PROFILE
-fi
-
-if [ -z "${REGION}" ] ; then
-  read -rp "AWS Region: " REGION
 fi
 
 aws cloudformation package \
