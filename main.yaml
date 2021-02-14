@@ -352,40 +352,6 @@ Resources:
       TimeoutInMinutes: 30
 
 
-  # ############ Analyze ############
-  # AnalyzeTaskStack:
-  #   Type: AWS::CloudFormation::Stack
-  #   Properties:
-  #     Parameters:
-  #       ApplicationTag: !Ref ApplicationTag
-  #       ContainerCpu: !Ref AnalyzeContainerCpu
-  #       ContainerMemory: !Ref AnalyzeContainerMemory
-  #       ImageRepoName: !Sub
-  #         - ${ContainerRegistry}/${Service}
-  #         - Service: !FindInMap [Service, Analyze, ImageRepoName]
-  #       ImageTag: !Ref AnalyzeImageTag
-  #       LogGroupName: !GetAtt InfrastructureStack.Outputs.LogGroup
-  #     TemplateURL: analyze/task.yaml
-  #     TimeoutInMinutes: 30
-
-  # AnalyzeServiceStack:
-  #   Type: AWS::CloudFormation::Stack
-  #   Properties:
-  #     Parameters:
-  #       AnalyzeSG: !GetAtt InfrastructureStack.Outputs.AnalyzeSecurityGroup
-  #       ApplicationTag: !Ref ApplicationTag
-  #       CapacityProvider: !Ref CapacityProvider
-  #       ClusterName: !GetAtt ClusterStack.Outputs.ClusterName
-  #       LoadbalancerListenerPath: !FindInMap [Service, Analyze, LoadbalancerListenerPath]
-  #       LoadbalancerListenerPriority: !FindInMap [Service, Analyze, LoadbalancerListenerPriority]
-  #       DesiredCount: !Ref AnalyzeDesiredCount
-  #       TaskDefinition: !GetAtt AnalyzeTaskStack.Outputs.TaskDefinition
-  #       PrivateSubnets: !Join [",", !Ref PrivateSubnets]
-  #       PublicLoadbalancerListenerArn: !GetAtt LoadbalancerStack.Outputs.PublicListener
-  #       Vpc: !Ref Vpc
-  #     TemplateURL: analyze/service.yaml
-  #     TimeoutInMinutes: 30
-
   # ############ Frontend ############
   # FrontendTaskStack:
   #   Type: AWS::CloudFormation::Stack
