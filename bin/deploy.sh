@@ -74,7 +74,7 @@ aws cloudformation package \
   --region "${REGION}"
 
 aws cloudformation deploy \
-  --template-file ./packaged.yaml \
+  --template-file "$PROJECT_ROOT"/packaged.yaml \
   --stack-name "${STACK_NAME}" \
   --parameter-overrides \
     AdapterContainerCpu="${ADAPTER_CONTAINER_CPU}" \
