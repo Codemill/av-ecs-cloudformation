@@ -76,6 +76,7 @@ aws cloudformation package \
 aws cloudformation deploy \
   --template-file "$PROJECT_ROOT"/packaged.yaml \
   --stack-name "${STACK_NAME}" \
+  --profile "${PROFILE}" \
   --parameter-overrides \
     AdapterContainerCpu="${ADAPTER_CONTAINER_CPU}" \
     AdapterContainerMemory="${ADAPTER_CONTAINER_MEMORY}" \
