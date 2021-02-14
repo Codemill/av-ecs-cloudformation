@@ -351,68 +351,6 @@ Resources:
       TemplateURL: adapter.yaml
       TimeoutInMinutes: 30
 
-  # AdapterDatabaseStack:
-  #   Type: AWS::CloudFormation::Stack
-  #   Properties:
-  #     Parameters:
-  #       ApplicationTag: !Ref ApplicationTag
-  #       RdsAllocatedStorage: !FindInMap [Service, Adapter, RdsAllocatedStorage]
-  #       RdsMaxAllocatedStorage: !FindInMap [Service, Adapter, RdsMaxAllocatedStorage]
-  #       RdsDbClass: !Ref AdapterRdsDbClass
-  #       RdsDbSecurityGroup: !GetAtt InfrastructureStack.Outputs.AdapterRdsDbSecurityGroup
-  #       MultiAZ: !FindInMap [Service, Adapter, MultiAZ]
-  #       PrivateSubnets: !Join [",", !Ref PrivateSubnets]
-  #     TemplateURL: adapter/database.yaml
-  #     TimeoutInMinutes: 30
-
-  # AdapterSecretStack:
-  #   Type: AWS::CloudFormation::Stack
-  #   Properties:
-  #     Parameters:
-  #       ApplicationTag: !Ref ApplicationTag
-  #     TemplateURL: adapter/secret.yaml
-  #     TimeoutInMinutes: 30
-
-  # AdapterTaskStack:
-  #   Type: AWS::CloudFormation::Stack
-  #   Properties:
-  #     Parameters:
-  #       ApplicationTag: !Ref ApplicationTag
-  #       ContainerCpu: !Ref AdapterContainerCpu
-  #       ContainerMemory: !Ref AdapterContainerMemory
-  #       ImageRepoName: !Sub
-  #         - ${ContainerRegistry}/${Service}
-  #         - Service: !FindInMap [Service, Adapter, ImageRepoName]
-  #       ImageTag: !Ref AdapterImageTag
-  #       KeycloakBackendSecret: !GetAtt KeycloakSecretStack.Outputs.BackendSecret
-  #       KeycloakHost: !Sub "https://${LoadbalancerStack.Outputs.DomainName}"
-  #       LogGroupName: !GetAtt InfrastructureStack.Outputs.LogGroup
-  #       AuthRunnerSecret: !GetAtt AdapterSecretStack.Outputs.AuthRunnerSecretArn
-  #       ClusterName: !GetAtt ClusterStack.Outputs.ClusterName
-  #       DbEndpoint: !GetAtt AdapterDatabaseStack.Outputs.DbEndpoint
-  #       RdsInstanceSecret: !GetAtt AdapterDatabaseStack.Outputs.RdsInstanceSecret
-  #       VpcCidrBlock: !GetAtt GetVpcCidrLambdaStack.Outputs.CidrBlock
-  #     TemplateURL: adapter/task.yaml
-  #     TimeoutInMinutes: 30
-
-  # AdapterServiceStack:
-  #   Type: AWS::CloudFormation::Stack
-  #   Properties:
-  #     Parameters:
-  #       ApplicationTag: !Ref ApplicationTag
-  #       AdapterSG: !GetAtt InfrastructureStack.Outputs.AdapterSecurityGroup
-  #       CapacityProvider: !Ref CapacityProvider
-  #       ClusterName: !GetAtt ClusterStack.Outputs.ClusterName
-  #       DesiredCount: !Ref AdapterDesiredCount
-  #       LoadbalancerListenerPath: !FindInMap [Service, Adapter, LoadbalancerListenerPath]
-  #       LoadbalancerListenerPriority: !FindInMap [Service, Adapter, LoadbalancerListenerPriority]
-  #       PrivateDNSNamespace: !GetAtt InfrastructureStack.Outputs.PrivateDnsNamespace
-  #       PrivateSubnets: !Join [",", !Ref PrivateSubnets]
-  #       PublicLoadbalancerListenerArn: !GetAtt LoadbalancerStack.Outputs.PublicListener
-  #       TaskDefinition: !GetAtt AdapterTaskStack.Outputs.TaskDefinition
-  #       Vpc: !Ref Vpc
-  #     TemplateURL: adapter/service.yaml
-  #     TimeoutInMinutes: 30
 
   # ############ Analyze ############
   # AnalyzeTaskStack:
