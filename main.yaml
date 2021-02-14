@@ -351,6 +351,33 @@ Resources:
       TemplateURL: adapter.yaml
       TimeoutInMinutes: 30
 
+      #AnalyzeStack:
+      #  Type: AWS::CloudFormation::Stack
+      #    Properties: 
+      #      Parameters: 
+      #        InfrastructureStackName: !Ref InfrastructureStack
+      #        ImageRepoName: !FindInMap [Service, Analyze, ImageRepoName]
+      #        ImageTag: !Ref AnalyzeImageTag
+      #        RegistryCredentials: !Ref RegistrySecretArn
+      #        # Type: String
+      #        # Description: Credentials to codemill.jfrog.io for pulling docker images
+      #        ContainerCpu: !Ref AnalyzeContainerCpu
+      #        ContainerMemory: !Ref AnalyzeContainerMemory
+      #        Path: !FindInMap [Service, Analyze, LoadbalancerListenerPath]
+      #        Priority: !FindInMap [Service, Analyze, LoadbalancerListenerPriority]
+      #        DesiredCount: !Ref AnalyzeDesiredCount
+      #        ApplicationTag: !Ref ApplicationTag
+      #        ApAnalyzeCacheDays: "5"
+      #        ApAnalyzeCacheDir: "/tmp/wav"
+      #        QuarkusHttpCors: "true"
+      #        HttpPathPrefix: "/api"
+      #        Vpc: !Ref Vpc
+      #        PrivateSubnetOne: !Select 0 !Ref PublicSubnets
+      #        PrivateSubnetTwo: !Select 1 !Ref PublicSubnets
+      #        PublicLoadbalancerListenerArn: !GetAtt LoadbalancerStack.Outputs.PublicListener
+      #        ClusterName: !GetAtt ClusterStack.Outputs.ClusterName
+      #      TemplateURL: analyze.yaml
+      #      TimeoutInMinutes: 30
 
   # ############ Frontend ############
   # FrontendTaskStack:
