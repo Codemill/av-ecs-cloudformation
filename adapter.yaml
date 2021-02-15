@@ -1,16 +1,11 @@
-AWSTemplateFormatVersion: "2010-09-09"
+AWSTemplateFormatVersion: 2010-09-09
 Description: Deploy a service on AWS Fargate, hosted in a private subnet, but accessible via a public load balancer.
 Parameters:
   InfrastructureStackName:
     Type: String
-    Default: av-infrastructure
     Description:
       The name of the parent Fargate networking stack that you created. Necessary
       to locate and reference resources created by that stack.
-  DBName:
-    Type: String
-    Default: accurate_video
-    Description: A name for the database
   ImageRepoName:
     Type: String
     Default: codemill-docker.jfrog.io/accurate-player/accurate-player-adapter-postgres
@@ -43,31 +38,54 @@ Parameters:
     Type: Number
     Default: 1
     Description: How many copies of the service task to run
-  RegistryCredentials:
+  RegistrySecretArn:
     Type: String
     Description: Credentials to codemill.jfrog.io for pulling docker images
   ApplicationTag:
     Type: String
     Default: "accurate-video"
   Vpc:
-    Description: "VPC ID"
     Type: AWS::EC2::VPC::Id
-  PrivateSubnetOne:
-    Description: "Private Subnet One ID"
-    Type: AWS::EC2::Subnet::Id
-  PrivateSubnetTwo:
-    Description: "Private Subnet Two ID"
-    Type: AWS::EC2::Subnet::Id
+    Description: "VPC ID"
+  PrivateSubnets:
+    Type: String
+    Description: "Private Subnet IDs"
   PublicLoadbalancerListenerArn:
+    Type: String
     Description: "Public Loadbalancer Listener Arn"
-    Type: String
   ClusterName:
-    Description: "ECS cluster name"
     Type: String
+    Description: "ECS cluster name"
     Default: av-cluster
   VpcCidrBlock:
     Type: String
     Description: VPC CIDR Block (e.g. 10.0.0.0/16)
+  RdsAllocatedStorage:
+    Type: String
+    Description: Size of the database in GB
+  RdsMaxAllocatedStorage:
+    Type: String
+    Description: Maximum size of the database in GB
+  RdsDbClass:
+    Type: String
+    AllowedValues:
+      - db.t3.small
+      - db.t3.medium
+      - db.t3.large
+      - db.m5.large
+    Description: The RDS Database class to use
+  RdsDatabaseSG:
+    Type: String
+    Description: Adapter RDS Security Group
+  LogGroupName:
+    Type: String
+    Description: CloudWatch Log Group Name
+  MultiAZ:
+    Type: String
+    Description: "Run hot standby replica in different AZ"
+    AllowedValues:
+      - "true"
+      - "false"
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -80,26 +98,71 @@ Metadata:
           - DesiredCount
           - Priority
           - Path
-          - DBName
       - Label:
           default: "Image configuration"
         Parameters:
           - ImageRepoName
           - ImageTag
-          - RegistryCredentials
+          - RegistrySecretArn
       - Label:
           default: "Other"
         Parameters:
           - InfrastructureStackName
           - Vpc
-          - PrivateSubnetOne
-          - PrivateSubnetTwo
+          - PrivateSubnets
           - PublicLoadbalancerListenerArn
           - VpcCidrBlock
           - ClusterName
           - ApplicationTag
 
 Resources:
+  ################################ RDS ################################
+  #####################################################################
+  RdsDbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: AccurateVideo-Adapter-DB-Subnet-group
+      SubnetIds: !Split [",", !Ref PrivateSubnets]
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  RdsInstanceSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Accurate Video - Adapter - RDS instance secret
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "postgres"}'
+        GenerateStringKey: "password"
+        PasswordLength: 16
+        ExcludeCharacters: '"@/\'
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+
+  DBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: !Ref RdsAllocatedStorage
+      DBInstanceClass: !Ref RdsDbClass
+      DBName: accurate_video
+      DBSubnetGroupName: !Ref RdsDbSubnetGroup
+      DeletionProtection: true
+      Engine: Postgres
+      MasterUsername: !Sub "{{resolve:secretsmanager:${RdsInstanceSecret}::username}}"
+      MasterUserPassword: !Sub "{{resolve:secretsmanager:${RdsInstanceSecret}::password}}"
+      MaxAllocatedStorage: !Ref RdsMaxAllocatedStorage
+      MultiAZ: !Ref MultiAZ
+      StorageEncrypted: true
+      StorageType: gp2
+      VPCSecurityGroups:
+        - !Ref RdsDatabaseSG
+      Tags:
+        - Key: application
+          Value: !Ref ApplicationTag
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+
   AuthRunnerSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
@@ -147,12 +210,11 @@ Resources:
           LogConfiguration:
             LogDriver: "awslogs"
             Options:
-              awslogs-group:
-                Fn::ImportValue: !Sub ${InfrastructureStackName}:AVLogGroup
+              awslogs-group: !Ref LogGroupName
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: av-adapter
           RepositoryCredentials:
-            CredentialsParameter: !Ref "RegistryCredentials"
+            CredentialsParameter: !Ref "RegistrySecretArn"
           Environment:
             - Name: ACL_ENABLED
               Value: "false"
@@ -176,12 +238,6 @@ Resources:
               Value: "org.postgresql.Driver"
             - Name: QUARKUS_DATASOURCE_URL
               Value: !Sub
-                - "jdbc:postgresql://${DBUrl}/${dbName}"
-                - DBUrl:
-                    Fn::ImportValue: !Sub ${InfrastructureStackName}:DBEndpoint
-                  dbName: !Ref "DBName"
-            - Name: QUARKUS_FLYWAY_BASELINE-ON-MIGRATE
-              Value: "false"
             - Name: QUARKUS_FLYWAY_MIGRATE-AT-START
               Value: "false"
             - Name: QUARKUS_HIBERNATE-ORM_DIALECT
@@ -248,7 +304,7 @@ Resources:
                 Action:
                   - "secretsmanager:GetSecretValue"
                 Resource:
-                  - !Ref RegistryCredentials
+                  - !Ref RegistrySecretArn
                   - Fn::ImportValue: !Sub ${InfrastructureStackName}:RDSInstanceSecretArn
                   - !Ref AuthRunnerSecret
       ManagedPolicyArns:
@@ -326,9 +382,7 @@ Resources:
         AwsvpcConfiguration:
           SecurityGroups:
             - Fn::ImportValue: !Sub ${InfrastructureStackName}:AvAdapterSG
-          Subnets:
-            - !Ref PrivateSubnetOne
-            - !Ref PrivateSubnetTwo
+          Subnets: !Split [",", !Ref PrivateSubnets]
       PlatformVersion: "1.4.0"
       TaskDefinition: !Ref "TaskDefinition"
       LoadBalancers:
@@ -474,3 +528,9 @@ Outputs:
     Value: !GetAtt "DiscoveryService.Name"
     Export:
       Name: !Sub ${AWS::StackName}:DiscoveryServiceName
+
+  DBEndpoint:
+    Description: The endpoint of the database
+    Value: !GetAtt "DBInstance.Endpoint.Address"
+    Export:
+      Name: !Sub ${AWS::StackName}:DBEndpoint

@@ -20,7 +20,7 @@ Parameters:
     Type: String
     Default: 4.6.1
     Description: The docker image tag to use for image deployment
-  RegistryCredentials:
+  RegistrySecretArn:
     Type: String
     Description: Credentials to codemill.jfrog.io for pulling docker images
   ContainerCpu:
@@ -56,15 +56,15 @@ Parameters:
     Default: "1"
     Description: Black frame denominator
   PrivateSubnetOne:
+    Type: AWS::EC2::Subnet::Id
     Description: "Private Subnet One ID"
-    Type: AWS::EC2::Subnet::Id
   PrivateSubnetTwo:
-    Description: "Private Subnet Two ID"
     Type: AWS::EC2::Subnet::Id
+    Description: "Private Subnet Two ID"
   ClusterName:
-    Description: "ECS cluster name"
     Type: String
     Default: av-cluster
+    Description: "ECS cluster name"
   VpcCidrBlock:
     Type: String
     Description: VPC CIDR Block (e.g. 10.0.0.0/16)
@@ -83,7 +83,7 @@ Metadata:
         Parameters:
           - ImageRepoName
           - ImageTag
-          - RegistryCredentials
+          - RegistrySecretArn
       - Label:
           default: "Elemental configuration"
         Parameters:
@@ -118,7 +118,7 @@ Resources:
           Memory: !Ref "ContainerMemory"
           Image: !Sub ${ImageRepoName}:${ImageTag}
           RepositoryCredentials:
-            CredentialsParameter: !Ref "RegistryCredentials"
+            CredentialsParameter: !Ref "RegistrySecretArn"
           PortMappings:
             - ContainerPort: 5701
             - ContainerPort: 5699
@@ -201,7 +201,7 @@ Resources:
                 Action:
                   - "secretsmanager:GetSecretValue"
                 Resource:
-                  - !Ref RegistryCredentials
+                  - !Ref RegistrySecretArn
                   - Fn::ImportValue: !Sub ${AdapterStackName}:AuthRunnerSecretArn
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
